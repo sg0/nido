@@ -322,8 +322,7 @@ class Graph
         GraphElem lnv_, lne_, nv_, ne_;
         GraphWeight sum_weights_;
         std::vector<GraphElem> parts_;   
-        std::vector<int> targets_;
-        MPI_Comm comm_, nbcomm_; 
+        MPI_Comm comm_; 
         int rank_, size_;
 };
 

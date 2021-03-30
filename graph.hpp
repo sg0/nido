@@ -120,42 +120,32 @@ class Graph
             edge_list_.clear();
             edge_indices_.clear();
             parts_.clear();
-            CUDACHECK(cudaFree(cluster_));
-            CUDACHECK(cudaFree(cluster_weight_));
-            CUDACHECK(cudaFree(cluster_degree_));
+            cluster_.clear();
+            cluster_weight_.clear();
+            cluster_degree_.clear();
         }
 
-        void device_alloc_fill()
+        void cluster_alloc_fill()
         {
-            CUDACHECK(cudaMalloc(&cluster_, sizeof(GraphElem)*lnv_));
-            CUDACHECK(cudaMemset(&cluster, 0, sizeof(GraphElem)*lnv_));
-            CUDACHECK(cudaMalloc(&cluster_weight_, sizeof(GraphWeight)*lnv_));
-            CUDACHECK(cudaMalloc(&cluster_degree_, sizeof(GraphElem)*lnv_));
-
-            std::vector<GraphWeight> nbr_weight(lnv_, 0);
-            std::vector<GraphElem> nbr_degree(lnv_, 0);
-
+            cluster_.resize(lnv_, 0);
+            cluster_weight_.resize(lnv_, 0);
+            cluster_degree_.resize(lnv_, 0);
+            
             GraphWeight sum = 0.0;
 #pragma omp parallel for reduction(+:sum)
             for (GraphElem i = 0; i < lnv_; i++)
             {
                 edge_range(i, e0, e1);
+                cluster_degree_[i] = e1 - e0 + 1;
                 for (GraphElem e = e0; e < e1; e++)
                 {
                     Edge const& edge = get_edge(e);
-                    nbr_weight[i] += edge.weight_;
-                    nbr_degree[i] += 1;
+                    cluster_weight_[i] += edge.weight_;
                     sum += edge.weight_;
                 }
             }
 
-            CUDACHECK(cudaMemcpy(&cluster_weight_, nbr_weight.data(), sizeof(GraphWeight)*lnv_, cudaMemcpyHostToDevice));
-            CUDACHECK(cudaMemcpy(&cluster_degree_, nbr_degree.data(), sizeof(GraphElem)*lnv_, cudaMemcpyHostToDevice));
-
             MPI_Allreduce(&sum, &sum_weights_, 1, MPI_WEIGHT_TYPE, MPI_SUM, comm_);
-
-            nbr_weight.clear();
-            nbr_degree.clear();
         }
          
         // update vertex partition information
@@ -209,6 +199,7 @@ class Graph
 
             return (iter - parts_.begin() - 1);
         }
+        
 
         GraphElem get_lnv() const { return lnv_; }
         GraphElem get_lne() const { return lne_; }
@@ -325,13 +316,14 @@ class Graph
         
         std::vector<GraphElem> edge_indices_;
         std::vector<Edge> edge_list_;
-        GraphElem *cluster_, *cluster_degree_;
-        GraphWeight *cluster_weight_;
+        std::vector<GraphElem> cluster_, cluster_degree_;
+        std::vector<GraphWeight> cluster_weight_;
     private:
         GraphElem lnv_, lne_, nv_, ne_;
         GraphWeight sum_weights_;
-        std::vector<GraphElem> parts_;       
-        MPI_Comm comm_; 
+        std::vector<GraphElem> parts_;   
+        std::vector<int> targets_;
+        MPI_Comm comm_, nbcomm_; 
         int rank_, size_;
 };
 
@@ -448,7 +440,7 @@ class BinaryEdgeList
                 g->edge_indices_[i] -= g->edge_indices_[0];   
             g->edge_indices_[0] = 0;
 
-            g->device_alloc_fill();
+            g->cluster_alloc_fill();
 
             return g;
         }
@@ -608,7 +600,7 @@ class BinaryEdgeList
                 g->edge_indices_[i] -= g->edge_indices_[0];   
             g->edge_indices_[0] = 0;
 
-            g->device_alloc_fill();
+            g->cluster_alloc_fill();
 
             mbins.clear();
 
@@ -1223,7 +1215,7 @@ class GenerateRGG
                 }
             }
             
-            g->device_alloc_fill();
+            g->cluster_alloc_fill();
             
 #if defined(CHECK_NUM_EDGES)
             GraphElem tot_numEdges = 0;

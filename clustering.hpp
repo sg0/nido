@@ -306,6 +306,30 @@ class Clustering
             }
         }
 
+        void outstanding_puts()
+        {
+            for (int i = 0; i < degree_; i++)
+            {
+                const GraphElem pidx = pindex_[targets_[i]];
+                const GraphElem curr_count = scounts_[pidx];
+                const GraphElem index = nghosts_target_indices_[pidx] + curr_count;
+
+                sendbuf_[index] = data[0];
+                sendbuf_[index + 1] = data[1];
+                sendbuf_[index + 2] = tag;
+
+                GraphElem tdisp = rdispls_[pidx] + curr_count;
+
+#if defined(USE_MPI_ACCUMULATE)
+                MPI_Accumulate(&sendbuf_[index], curr_count, mpi_cluster_t, targets_[i], 
+                        (MPI_Aint)tdisp, curr_count, mpi_cluster_t_, MPI_REPLACE, nwin_);
+#else
+                MPI_Put(&sendbuf_[index], curr_count, mpi_cluster_t_, targets_[i], 
+                        (MPI_Aint)tdisp, curr_count, mpi_cluster_t_, nwin_);
+#endif
+            }
+        }
+
         GraphWeight modularity()
         {
             const GraphElem lnv = g->get_lnv();

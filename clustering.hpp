@@ -19,6 +19,14 @@
 #include "graph.hpp"
 #include "utils.hpp"
 
+struct Cluster
+{
+    GraphElem id_;
+    GraphElem degree_;
+    GraphWeight weight_;
+    
+    Cluster(): id_(-1), degree_(0), weight_(0.0) {}
+};
 
 class Clustering
 {
@@ -30,110 +38,121 @@ class Clustering
             pindex_(0), degree_(-1), prcounts_(0), scounts_(0), 
             rcounts_(0), rdispls_(0), nwin_(MPI_WIN_NULL), 
             winbuf_(nullptr)
-    {
-        comm_ = g_->get_comm();
-        MPI_Comm_size(comm_, &size_);
-        MPI_Comm_rank(comm_, &rank_);
-
-        // neighborhood communicator
-        const GraphElem lnv = g_->get_lnv();
-        for (GraphElem v = 0; v < lnv; v++)
         {
-            GraphElem e0, e1;
-            g_->edge_range(v, e0, e1);
+            comm_ = g_->get_comm();
+            MPI_Comm_size(comm_, &size_);
+            MPI_Comm_rank(comm_, &rank_);
 
-            for (GraphElem e = e0; e < e1; e++)
+            // neighborhood communicator
+            const GraphElem lnv = g_->get_lnv();
+            for (GraphElem v = 0; v < lnv; v++)
             {
-                Edge const& edge = g_->get_edge(e);
-                const int owner = g_->get_owner(edge.tail_); 
-                if (owner != rank_)
+                GraphElem e0, e1;
+                g_->edge_range(v, e0, e1);
+
+                for (GraphElem e = e0; e < e1; e++)
                 {
-                    if (std::find(targets_.begin(), targets_.end(), owner) 
-                            == targets_.end())
+                    Edge const& edge = g_->get_edge(e);
+                    const int owner = g_->get_owner(edge.tail_); 
+                    if (owner != rank_)
                     {
-                        targets_.push_back(owner);
+                        if (std::find(targets_.begin(), targets_.end(), owner) 
+                                == targets_.end())
+                        {
+                            targets_.push_back(owner);
+                        }
                     }
                 }
             }
-        }
 
-        degree_ = targets_.size();
-        MPI_Dist_graph_create_adjacent(comm_, targets_.size(), targets_.data(), 
-                MPI_UNWEIGHTED, targets_.size(), targets_.data(), MPI_UNWEIGHTED, 
-                MPI_INFO_NULL, 0 /*reorder ranks*/, &nbcomm_);
+            degree_ = targets_.size();
+            MPI_Dist_graph_create_adjacent(comm_, targets_.size(), targets_.data(), 
+                    MPI_UNWEIGHTED, targets_.size(), targets_.data(), MPI_UNWEIGHTED, 
+                    MPI_INFO_NULL, 0 /*reorder ranks*/, &nbcomm_);
 
-        for (int i = 0; i < degree_; i++)
-            pindex_.insert({targets_[i], (GraphElem)i}); 
+            for (int i = 0; i < degree_; i++)
+                pindex_.insert({targets_[i], (GraphElem)i}); 
 
-        nghosts_in_target_.resize(degree_);
-        nghosts_target_indices_.resize(degree_);          
-        rdispls_.resize(degree_);
+            nghosts_in_target_.resize(degree_);
+            nghosts_target_indices_.resize(degree_);          
+            rdispls_.resize(degree_);
 
-        // populate counter that tracks number
-        // of ghosts not owned by me
-        GraphElem tot_ghosts = 0;
+            // populate counter that tracks number
+            // of ghosts not owned by me
+            GraphElem tot_ghosts = 0;
 
-        for (GraphElem i = 0; i < lnv; i++)
-        {
-            GraphElem e0, e1;
-            g_->edge_range(i, e0, e1);
-
-            for (GraphElem e = e0; e < e1; e++)
+            for (GraphElem i = 0; i < lnv; i++)
             {
-                Edge const& edge = g_->get_edge(e);
-                const int target = g_->get_owner(edge.tail_);
+                GraphElem e0, e1;
+                g_->edge_range(i, e0, e1);
 
-                if (target != rank_)
+                for (GraphElem e = e0; e < e1; e++)
                 {
-                    nghosts_in_target_[pindex_[target]] += 1;
-                    tot_ghosts += 1;
-                }
-            }                
-        }
+                    Edge const& edge = g_->get_edge(e);
+                    const int target = g_->get_owner(edge.tail_);
 
-        // initialize input buffer
+                    if (target != rank_)
+                    {
+                        nghosts_in_target_[pindex_[target]] += 1;
+                        tot_ghosts += 1;
+                    }
+                }                
+            }
 
-        // sends a pair of vertices with tag,
-        // can send at most 2 messages along a
-        // cross edge
-        sendbuf_ = new GraphElem[tot_ghosts*3*2];
+            
+            Cluster clust;
+            MPI_Aint begin, id, degree, weight;
 
-        // allocate MPI windows and lock them
+            MPI_Get_address(&clust, &begin);
+            MPI_Get_address(&clust.id, &id);
+            MPI_Get_address(&clust.degree, &degree);
+            MPI_Get_address(&clust.weight, &weight);
 
-        // TODO FIXME make the same changes for
-        // the base RMA version
-        MPI_Info info = MPI_INFO_NULL;
+            int blens[] = { 1, 1, 1 };
+            MPI_Aint displ[] = { id - begin, degree - begin, weight - begin };
+            MPI_Datatype types[] = { MPI_GRAPH_TYPE, MPI_GRAPH_TYPE, MPI_WEIGHT_TYPE };
+
+            MPI_Type_create_struct(3, blens, displ, types, &mpi_cluster_t_);
+            MPI_Type_commit(&mpi_cluster_t_);
+            
+            // initialize input buffer
+
+            // sends a pair of vertices with tag,
+            // can send at most 2 messages along a
+            // cross edge
+            sendbuf_ = new Cluster[tot_ghosts];
+
+            MPI_Info info = MPI_INFO_NULL;
 
 #if defined(USE_MPI_ACCUMULATE)
-        MPI_Info_create(&info);
-        MPI_Info_set(info, "accumulate_ordering", "none");
-        MPI_Info_set(info, "accumulate_ops", "same_op");
+            MPI_Info_create(&info);
+            MPI_Info_set(info, "accumulate_ordering", "none");
+            MPI_Info_set(info, "accumulate_ops", "same_op");
 #endif
 
-        // TODO FIXME report bug, program crashes when g_comm_ used
-        MPI_Win_allocate((tot_ghosts*3*2)*sizeof(GraphElem), 
-                sizeof(GraphElem), info, comm_, &winbuf_, &nwin_);             
+            MPI_Win_allocate(tot_ghosts*sizeof(Cluster), 
+                    sizeof(Cluster), info, comm_, &winbuf_, &nwin_);             
 
-        MPI_Win_lock_all(MPI_MODE_NOCHECK, nwin_);
+            MPI_Win_lock_all(MPI_MODE_NOCHECK, nwin_);
 
-        // exclusive scan to compute remote 
-        // displacements for RMA CALLS
-        GraphElem disp = 0;
-        for (int t = 0; t < degree_; t++)
-        {
-            nghosts_target_indices_[t] = disp;
-            disp += nghosts_in_target_[t]*3*2;
+            // exclusive scan to compute remote 
+            // displacements for RMA CALLS
+            GraphElem disp = 0;
+            for (int t = 0; t < degree_; t++)
+            {
+                nghosts_target_indices_[t] = disp;
+                disp += nghosts_in_target_[t];
+            }
+
+            // incoming updated prefix sums
+            MPI_Neighbor_alltoall(nghosts_target_indices_.data(), 1, 
+                    MPI_GRAPH_TYPE, rdispls_.data(), 1, MPI_GRAPH_TYPE, nbcomm_);
+
+            // set neighbor alltoall params
+            scounts_.resize(degree_, 0);
+            rcounts_.resize(degree_, 0);
+            prcounts_.resize(degree_, 0);
         }
-
-        // incoming updated prefix sums
-        MPI_Neighbor_alltoall(nghosts_target_indices_.data(), 1, 
-                MPI_GRAPH_TYPE, rdispls_.data(), 1, MPI_GRAPH_TYPE, g_comm_);
-
-        // set neighbor alltoall params
-        scounts_.resize(outdegree_, 0);
-        rcounts_.resize(indegree_, 0);
-        prcounts_.resize(indegree_, 0);
-    }
 
         ~Clustering() {}
 
@@ -156,6 +175,7 @@ class Clustering
             MPI_Win_free(&nwin_);
 
             MPI_Comm_free(&nbcomm_);
+            MPI_Type_free(&mpi_cluster_t_);
         }
 
         int run_louvain(Graph* g, GraphWeight lower = -1.0, GraphWeight thresh = 1.0E-06)
@@ -169,30 +189,44 @@ class Clustering
 
             while(true) 
             {
-                iters++;
+                MPI_Win_flush_all(nwin_);
 
-                MPI_Put();
+                MPI_Neighbor_alltoall(scounts_.data(), 1, MPI_GRAPH_TYPE, 
+                        rcounts_.data(), 1, MPI_GRAPH_TYPE, nbcomm_);
 
-                if (iters == 1)
-                    mod = louvain_iteration_first(g);
-                else
-                    mod = louvain_iteration_next(g);
+                for (int k = 0; k < degree_; k++)
+                {
+                    const GraphElem index = nghosts_target_indices_[k];
+                    const int start = prcounts_[k];
+                    const int end = rcounts_[k];
 
+                    for (int i = start; i < end; i+=3)
+                    {
+                        Cluster clust = winbuf_[index + i];
+                    }
+                }
+                             
+                mod = modularity();
+                
                 if (mod - prev_mod < thresh)
                     break;
 
                 prev_mod = mod;
+                
                 if (prev_mod < lower)
-                    prev_mod = lower;
-            } 
+                    prev_mod = lower;              
+    
+                louvain_iteration();
 
-            MPI_Win_unlock_all(commwin);
-            MPI_Win_free(&commwin);
+                outstanding_puts();
+ 
+                iters++;
+            } 
 
             return iters;
         }
 
-        GraphWeight louvain_iteration(Graph *g, int me)
+        void louvain_iteration()
         {
             GraphWeight le_xx = 0.0, la2_x = 0.0, local_mod, mod;
             const GraphElem lnv = g->get_lnv();
@@ -259,16 +293,28 @@ class Clustering
                     }
                     else
                     {
+                        const int pidx = pindex_[target];
+                        const GraphElem curr_count = scounts_[pidx];
+                        const GraphElem index = nghosts_target_indices_[pidx] + curr_count;
 
+                        sendbuf_[index] = data[0];
+                        sendbuf_[index + 1] = data[1];
+                        sendbuf_[index + 2] = tag;
+                        scounts_[pidx]++;
                     }
                 }
             }
-
-            return mod;
         }
 
-        GraphWeight modularity(Graph *g)
+        GraphWeight modularity()
         {
+            const GraphElem lnv = g->get_lnv();
+            GraphWeight tot_weights = g->get_sum_weights();
+            GraphWeight constant_term = 1.0 / (GraphWeight)2.0 * tot_weights;
+            GraphWeight le_la_xx[2];
+            GraphWeight e_a_xx[2] = {0.0, 0.0};
+            GraphWeight le_xx = 0.0, la2_x = 0.0;
+
 #ifdef OMP_SCHEDULE_RUNTIME
 #pragma omp parallel for default(shared), shared(clusterWeight, localCinfo), \
             reduction(+: le_xx), reduction(+: la2_x) schedule(runtime)
@@ -276,25 +322,18 @@ class Clustering
 #pragma omp parallel for default(shared), shared(clusterWeight, localCinfo), \
             reduction(+: le_xx), reduction(+: la2_x) schedule(static)
 #endif
-            for (GraphElem i = 0L; i < nv; i++) {
-                le_xx += clusterWeight[i];
-                la2_x += static_cast<GraphWeight>(localCinfo[i].degree) * static_cast<GraphWeight>(localCinfo[i].degree); 
+            for (GraphElem i = 0; i < lnv; i++) 
+            {
+                le_xx += g_->cluster_weight_[i];
+                la2_x += static_cast<GraphWeight>(g_->cluster_degree_[i]) * static_cast<GraphWeight>(g_->cluster_degree_[i]); 
             } 
             le_la_xx[0] = le_xx;
             le_la_xx[1] = la2_x;
 
-#ifdef DEBUG_PRINTF  
-            const double t0 = MPI_Wtime();
-#endif
+            MPI_Allreduce(le_la_xx, e_a_xx, 2, MPI_WEIGHT_TYPE, MPI_SUM, comm_);
 
-            MPI_Allreduce(le_la_xx, e_a_xx, 2, MPI_WEIGHT_TYPE, MPI_SUM, gcomm);
-
-#ifdef DEBUG_PRINTF  
-            const double t1 = MPI_Wtime();
-#endif
-
-            GraphWeight currMod = std::fabs((e_a_xx[0] * constantForSecondTerm) - 
-                    (e_a_xx[1] * constantForSecondTerm * constantForSecondTerm));
+            GraphWeight mod = std::fabs((e_a_xx[0] * constant_term) - 
+                    (e_a_xx[1] * constant_term * constant_term));
 
             return mod;
         }
@@ -317,5 +356,6 @@ class Clustering
 
         int rank_, size_;
         MPI_Comm comm_;
-        MPI_Comm nbcomm_; 
+        MPI_Comm nbcomm_;
+        MPI_Datatype mpi_clust_t;
 };

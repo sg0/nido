@@ -190,7 +190,7 @@ class Graph
         GraphElem get_range(const int rank) const
         { return (parts_[rank+1] - parts_[rank] + 1); }
 
-        int get_owner(const GraphElem vertex) const
+        int owner(const GraphElem vertex) const
         {
             const std::vector<GraphElem>::const_iterator iter = 
                 std::upper_bound(parts_.begin(), parts_.end(), vertex);
@@ -1034,7 +1034,7 @@ class GenerateRGG
                     // randomly pick start/end vertex and target from my list
                     const GraphElem i = (GraphElem)IR(re, std::uniform_int_distribution<GraphElem>::param_type{0, (n_- 1)});
                     const GraphElem g_j = (GraphElem)JR(re, std::uniform_int_distribution<GraphElem>::param_type{0, (nv_- 1)});
-                    const int target = g->get_owner(g_j);
+                    const int target = g->owner(g_j);
                     const GraphElem j = g->global_to_local(g_j, target); // local
 
                     if (i == j) 

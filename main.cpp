@@ -180,8 +180,8 @@ int main(int argc, char **argv)
 #endif
         std::cout << "-------------------------------------------------------" << std::endl;
         std::cout << "Average total time (in s), #Processes: " << avgt << ", " << nprocs << std::endl;
-        std::cout << "Modularity, #Iterations: " << iter_mod << ", " << iters << std::endl;
-        std::cout << "MODS (final modularity * average time): " << (iter_mod * avgt) << std::endl;
+        std::cout << "Modularity, #Iterations: " << mod << ", " << iters << std::endl;
+        std::cout << "MODS (final modularity * average time): " << (mod * avgt) << std::endl;
         std::cout << "-------------------------------------------------------" << std::endl;
 #ifndef SSTMAC
         std::cout << "Resolution of MPI_Wtime: " << MPI_Wtick() << std::endl;

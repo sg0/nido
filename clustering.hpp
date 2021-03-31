@@ -99,7 +99,6 @@ class Clustering
                 }                
             }
 
-            
             Cluster clust;
             MPI_Aint begin, id, degree, weight;
 
@@ -238,15 +237,15 @@ class Clustering
         void louvain_iteration()
         {
             GraphWeight le_xx = 0.0, la2_x = 0.0, local_mod, mod;
-            const GraphElem lnv = g->get_lnv();
-            GraphWeight tot_weights = g->get_sum_weights();
+            const GraphElem lnv = g_->get_lnv();
+            GraphWeight tot_weights = g_->get_sum_weights();
             GraphWeight constant_term = 1.0 / (GraphWeight)2.0 * tot_weights;
             
             // local modularity
             for (GraphElem i = 0; i < lnv; i++) 
             {
-                le_xx += cluster_weight[i];
-                la2_x += static_cast<GraphWeight>(cluster_degree_[i]) * static_cast<GraphWeight>(cluster_degree_[i]); 
+                le_xx += g_->cluster_weight[i];
+                la2_x += static_cast<GraphWeight>(g_->cluster_degree_[i]) * static_cast<GraphWeight>(g_->cluster_degree_[i]); 
             } 
 
             mod = std::fabs((le_xx * constant_term) - (la2_x * constant_term * constant_term));
@@ -254,6 +253,7 @@ class Clustering
             // calculate delta-q and determine target community
             for (GraphElem i = 0; i < lnv; i++)
             {
+                GraphElem e0, e1;
                 g->edge_range(i, e0, e1);
                 GraphElem target_cluster = -1;
                 GraphWeight upd_mod = 0.0;
@@ -263,7 +263,7 @@ class Clustering
                     GraphWeight la2_xup = la2_x;
                     Edge const& edge = g->get_edge(e);
 
-                    if (g->owner(edge.tail_) == me)
+                    if (g->owner(edge.tail_) == rank_)
                     {
                         GraphElem curr_degree = g_->cluster_degree_[i];
                         curr_degree += g_->cluster_degree_[g->global_to_local(edge.tail_)];
@@ -335,10 +335,10 @@ class Clustering
             GraphWeight le_xx = 0.0, la2_x = 0.0;
 
 #ifdef OMP_SCHEDULE_RUNTIME
-#pragma omp parallel for default(shared), shared(clusterWeight, localCinfo), \
+#pragma omp parallel for default(shared), shared(g_->cluster_weight_, g_->cluster_degree_), \
             reduction(+: le_xx), reduction(+: la2_x) schedule(runtime)
 #else
-#pragma omp parallel for default(shared), shared(clusterWeight, localCinfo), \
+#pragma omp parallel for default(shared), shared(g_->cluster_weight_, g_->cluster_degree_), \
             reduction(+: le_xx), reduction(+: la2_x) schedule(static)
 #endif
             for (GraphElem i = 0; i < lnv; i++) 
@@ -361,14 +361,13 @@ class Clustering
         Graph* g_;
         
         std::unordered_map<int, GraphElem> pindex_;                    
-        GraphElem* sendbuf_;
+        Cluster *sendbuf_, *winbuf_;
 
         std::vector<int> targets_;
         std::vector<GraphElem> scounts_, rcounts_, prcounts_;
         int degree_;
 
         MPI_Win nwin_; 
-        Cluster* winbuf_;
         std::vector<GraphElem> rdispls_, // target displacement
             nghosts_in_target_,          // ghost vertices in target rank
             nghosts_target_indices_;     // indices of data 

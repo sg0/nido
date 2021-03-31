@@ -38,9 +38,8 @@ class Clustering
         Clustering (Graph* g): 
             g_(g), targets_(0), sendbuf_(0),
             nghosts_in_target_(0), nghosts_target_indices_(0), 
-            pindex_(0), degree_(-1), prcounts_(0), scounts_(0), 
-            rcounts_(0), rdispls_(0), nwin_(MPI_WIN_NULL), 
-            winbuf_(nullptr)
+            pindex_(0), degree_(-1), scounts_(0), rcounts_(0), 
+            rdispls_(0), nwin_(MPI_WIN_NULL), winbuf_(nullptr)
         {
             comm_ = g_->get_comm();
             MPI_Comm_size(comm_, &size_);
@@ -153,7 +152,6 @@ class Clustering
             // set neighbor alltoall params
             scounts_.resize(degree_, 0);
             rcounts_.resize(degree_, 0);
-            prcounts_.resize(degree_, 0);
         }
 
         ~Clustering() {}
@@ -164,7 +162,6 @@ class Clustering
 
             scounts_.clear();
             rcounts_.clear();
-            prcounts_.clear();
             rdispls_.clear();
 
             nghosts_in_target_.clear();
@@ -190,6 +187,7 @@ class Clustering
             {
                 MPI_Win_flush_all(nwin_);
 
+                rcounts_.clear();
                 MPI_Neighbor_alltoall(scounts_.data(), 1, MPI_GRAPH_TYPE, 
                         rcounts_.data(), 1, MPI_GRAPH_TYPE, nbcomm_);
 
@@ -197,21 +195,17 @@ class Clustering
                 for (int k = 0; k < degree_; k++)
                 {
                     const GraphElem index = nghosts_target_indices_[k];
-                    const int start = prcounts_[k];
-                    const int end = rcounts_[k];
 
-                    for (GraphElem i = start; i < end; i++)
+                    for (GraphElem i = 0; i < rcounts_[k]; i++)
                     {
                         Cluster clust = winbuf_[index + i];
                         const GraphElem vid = g_->global_to_local(clust.vid_);
                         g_->cluster_degree_[vid] += clust.degree_;
                         g_->cluster_weight_[vid] += clust.weight_;
                     }
-
-                    // retain past recv counts
-                    prcounts_[k] = rcounts_[k];
                 }
 
+                // global modularity calculation
                 mod = modularity();
                 
                 if (mod - prev_mod < thresh)
@@ -222,8 +216,11 @@ class Clustering
                 if (prev_mod < lower)
                     prev_mod = lower;              
     
+                // determine target cluster based on local computation 
                 louvain_iteration();
 
+                // push out cluster size/degree to process containing 
+                // target clusters for remotely owned vertices
                 outstanding_puts();
  
                 iters++;
@@ -370,7 +367,7 @@ class Clustering
         Cluster *sendbuf_, *winbuf_;
 
         std::vector<int> targets_;
-        std::vector<GraphElem> scounts_, rcounts_, prcounts_;
+        std::vector<GraphElem> scounts_, rcounts_;
         int degree_;
 
         MPI_Win nwin_; 

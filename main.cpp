@@ -62,6 +62,18 @@ int main(int argc, char **argv)
     MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     MPI_Comm_rank(MPI_COMM_WORLD, &me);
 
+    int ver, sver;
+    MPI_Get_version(&ver, &sver);
+
+    if (ver < 3)
+    {
+        if (me == 0)
+        {
+            std::cerr << "This program relies on MPI-3 RMA and Neighborhood Collectives." << std::endl;
+            std::cerr << "MPI version is found to be " << ver << "." << sver << ", not MPI-3 compliant." << std::endl;
+        }    
+    }
+
     // command line options
     MPI_Barrier(MPI_COMM_WORLD);
     parseCommandLine(argc, argv);

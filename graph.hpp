@@ -131,7 +131,7 @@ class Graph
             cluster_.resize(lnv_, 0);
             cluster_degree_.resize(lnv_, 0);
             cluster_weight_.resize(lnv_, 0.0);
-            
+           
             GraphWeight sum = 0.0;
 #pragma omp parallel for reduction(+:sum)
             for (GraphElem i = 0; i < lnv_; i++)

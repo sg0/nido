@@ -78,7 +78,11 @@ class Clustering
             nghosts_in_target_.resize(degree_);
             nghosts_target_indices_.resize(degree_);          
             rdispls_.resize(degree_);
-
+            std::vector<GraphElem> out_nbr_cluster_degree(degree_);
+            std::vector<GraphWeight> out_nbr_cluster_weight(degree_);
+            nbr_cluster_degree_.resize(degree_, 0);
+            nbr_cluster_weight_.resize(degree_, 0.0);
+            
             // populate counter that tracks number
             // of ghosts not owned by me
             GraphElem tot_ghosts = 0;
@@ -95,6 +99,9 @@ class Clustering
 
                     if (target != rank_)
                     {
+                        // TODO FIXME bypass repeated assignments
+                        nbr_cluster_degree_[pindex_[target]] = g_->cluster_degree_[i];
+                        nbr_cluster_weight_[pindex_[target]] = g_->cluster_weight_[i];
                         nghosts_in_target_[pindex_[target]] += 1;
                         tot_ghosts += 1;
                     }
@@ -147,7 +154,15 @@ class Clustering
 
             // set neighbor alltoall params
             scounts_.resize(degree_, 0);
-            rcounts_.resize(degree_, 0);
+            rcounts_.resize(degree_, 0); 
+
+            // neighbor's cluster weights and degrees
+            MPI_Neighbor_alltoall(out_nbr_cluster_degree.data(), 1, 
+                    MPI_GRAPH_TYPE, nbr_cluster_degree_.data(), 1, 
+                    MPI_GRAPH_TYPE, nbcomm_);
+            MPI_Neighbor_alltoall(out_nbr_cluster_weight.data(), 1, 
+                    MPI_WEIGHT_TYPE, nbr_cluster_weight_.data(), 1, 
+                    MPI_WEIGHT_TYPE, nbcomm_);
         }
 
         ~Clustering() {}
@@ -163,6 +178,8 @@ class Clustering
             nghosts_in_target_.clear();
             nghosts_target_indices_.clear();
             pindex_.clear();
+            nbr_cluster_degree_.clear();
+            nbr_cluster_weight_.clear();
 
             delete []sendbuf_;
 
@@ -234,8 +251,7 @@ class Clustering
         {
             GraphWeight le_xx = 0.0, la2_x = 0.0, local_mod, mod;
             const GraphElem lnv = g_->get_lnv();
-            GraphWeight tot_weights = g_->get_sum_weights();
-            GraphWeight constant_term = 1.0 / (GraphWeight)2.0 * tot_weights;
+            GraphWeight constant_term = 1.0 / g_->get_sum_weights();
             
             // local modularity
             for (GraphElem i = 0; i < lnv; i++) 
@@ -245,6 +261,11 @@ class Clustering
             } 
 
             mod = std::fabs((le_xx * constant_term) - (la2_x * constant_term * constant_term));
+
+#ifdef DEBUG_MOD_GROWTH
+            if (rank_ == 0)
+                std::cout << "Local modularity (within Louvain iteration): " << mod << std::endl;
+#endif
 
             // calculate delta-q and determine target community
             for (GraphElem i = 0; i < lnv; i++)
@@ -256,22 +277,23 @@ class Clustering
 
                 for (GraphElem e = e0; e < e1; e++)
                 {
-                    GraphWeight la2_xup = la2_x; // le_xx will be unchanged
                     Edge const& edge = g_->get_edge(e);
+                    GraphWeight la2_xup = la2_x; // le_xx will be unchanged
+                    GraphElem curr_degree = g_->cluster_degree_[i];
+                    
+                    la2_xup -= static_cast<GraphWeight>(g_->cluster_degree_[i]) * static_cast<GraphWeight>(g_->cluster_degree_[i]);
 
-                    if (g_->owner(edge.tail_) == rank_)
-                    {
-                        GraphElem curr_degree = g_->cluster_degree_[i];
+                    const int target = g_->owner(edge.tail_);
+                    if (target == rank_)
                         curr_degree += g_->cluster_degree_[g_->global_to_local(edge.tail_)];
-                        la2_xup += static_cast<GraphWeight>(curr_degree) * static_cast<GraphWeight>(curr_degree) 
-                            - static_cast<GraphWeight>(g_->cluster_degree_[i]) * static_cast<GraphWeight>(g_->cluster_degree_[i]);
-                    }
                     else
-                        la2_xup -= static_cast<GraphWeight>(g_->cluster_degree_[i]) * static_cast<GraphWeight>(g_->cluster_degree_[i]);
+                        curr_degree += nbr_cluster_degree_[pindex_[target]];
+                        
+                    la2_xup += static_cast<GraphWeight>(curr_degree) * static_cast<GraphWeight>(curr_degree); 
 
                     upd_mod = std::fabs((le_xx * constant_term) - (la2_xup * constant_term * constant_term));
 
-                    if (upd_mod > mod)
+                    if (std::fabs(upd_mod - mod) > 0.0)
                     {
                         mod = upd_mod;
                         target_cluster = edge.tail_;
@@ -367,7 +389,9 @@ class Clustering
         std::vector<int> targets_;
         std::vector<GraphElem> scounts_, rcounts_;
         int degree_;
-
+        std::vector<GraphElem> nbr_cluster_degree_;
+        std::vector<GraphWeight> nbr_cluster_weight_;
+        
         MPI_Win nwin_; 
         std::vector<GraphElem> rdispls_, // target displacement
             nghosts_in_target_,          // ghost vertices in target rank

@@ -133,6 +133,7 @@ class Graph
 #pragma omp parallel for reduction(+:sum)
             for (GraphElem i = 0; i < lnv_; i++)
             {
+                GraphElem e0, e1;
                 edge_range(i, e0, e1);
                 cluster_degree_[i] = e1 - e0 + 1;
                 for (GraphElem e = e0; e < e1; e++)

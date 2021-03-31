@@ -1,6 +1,6 @@
 #pragma once
-#ifndef LOUVAIN_HPP
-#define LOUVAIN_HPP
+#ifndef CLUSTERING_HPP
+#define CLUSTERING_HPP
 
 #include <algorithm>
 #include <fstream>
@@ -53,7 +53,7 @@ class Clustering
                 for (GraphElem e = e0; e < e1; e++)
                 {
                     Edge const& edge = g_->get_edge(e);
-                    const int owner = g_->get_owner(edge.tail_); 
+                    const int owner = g_->owner(edge.tail_); 
                     if (owner != rank_)
                     {
                         if (std::find(targets_.begin(), targets_.end(), owner) 
@@ -89,7 +89,7 @@ class Clustering
                 for (GraphElem e = e0; e < e1; e++)
                 {
                     Edge const& edge = g_->get_edge(e);
-                    const int target = g_->get_owner(edge.tail_);
+                    const int target = g_->owner(edge.tail_);
 
                     if (target != rank_)
                     {
@@ -103,9 +103,9 @@ class Clustering
             MPI_Aint begin, id, degree, weight;
 
             MPI_Get_address(&clust, &begin);
-            MPI_Get_address(&clust.id, &id);
-            MPI_Get_address(&clust.degree, &degree);
-            MPI_Get_address(&clust.weight, &weight);
+            MPI_Get_address(&clust.vid_, &id);
+            MPI_Get_address(&clust.degree_, &degree);
+            MPI_Get_address(&clust.weight_, &weight);
 
             int blens[] = { 1, 1, 1 };
             MPI_Aint displ[] = { id - begin, degree - begin, weight - begin };
@@ -244,7 +244,7 @@ class Clustering
             // local modularity
             for (GraphElem i = 0; i < lnv; i++) 
             {
-                le_xx += g_->cluster_weight[i];
+                le_xx += g_->cluster_weight_[i];
                 la2_x += static_cast<GraphWeight>(g_->cluster_degree_[i]) * static_cast<GraphWeight>(g_->cluster_degree_[i]); 
             } 
 
@@ -287,7 +287,7 @@ class Clustering
                     const int target = g_->owner(target_cluster);
                     if (target == rank_)
                     {
-                        g_->cluster_degree[g_->global_to_local(target_cluster)] += g_->cluster_degree_[i];
+                        g_->cluster_degree_[g_->global_to_local(target_cluster)] += g_->cluster_degree_[i];
                         g_->cluster_weight_[g->global_to_local(target_cluster)] += g_->cluster_weight_[i];
                     }
                     else
@@ -333,18 +333,20 @@ class Clustering
             GraphWeight le_la_xx[2];
             GraphWeight e_a_xx[2] = {0.0, 0.0};
             GraphWeight le_xx = 0.0, la2_x = 0.0;
+            GraphElem *cluster_degree = g_->cluster_degree_;
+            GraphWeight *cluster_weight = g_->cluster_weight_;
 
 #ifdef OMP_SCHEDULE_RUNTIME
-#pragma omp parallel for default(shared), shared(g_->cluster_weight_, g_->cluster_degree_), \
+#pragma omp parallel for default(shared), shared(cluster_weight, cluster_degree), \
             reduction(+: le_xx), reduction(+: la2_x) schedule(runtime)
 #else
-#pragma omp parallel for default(shared), shared(g_->cluster_weight_, g_->cluster_degree_), \
+#pragma omp parallel for default(shared), shared(cluster_weight, cluster_degree), \
             reduction(+: le_xx), reduction(+: la2_x) schedule(static)
 #endif
             for (GraphElem i = 0; i < lnv; i++) 
             {
-                le_xx += g_->cluster_weight_[i];
-                la2_x += static_cast<GraphWeight>(g_->cluster_degree_[i]) * static_cast<GraphWeight>(g_->cluster_degree_[i]); 
+                le_xx += cluster_weight[i];
+                la2_x += static_cast<GraphWeight>(cluster_degree[i]) * static_cast<GraphWeight>(cluster_degree[i]); 
             } 
             le_la_xx[0] = le_xx;
             le_la_xx[1] = la2_x;
@@ -375,5 +377,6 @@ class Clustering
         int rank_, size_;
         MPI_Comm comm_;
         MPI_Comm nbcomm_;
-        MPI_Datatype mpi_clust_t;
+        MPI_Datatype mpi_cluster_t_;
 };
+#endif

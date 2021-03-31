@@ -43,6 +43,7 @@
 
 #define PI                          (3.14159)
 #define MAX_PRINT_NEDGE             (100000)
+#define DEFAULT_LOUVAIN_ITERS       (200)
 
 // Read https://en.wikipedia.org/wiki/Linear_congruential_generator#Period_length
 // about choice of LCG parameters

@@ -117,10 +117,6 @@ class Clustering
             MPI_Type_commit(&mpi_cluster_t_);
             
             // initialize input buffer
-
-            // sends a pair of vertices with tag,
-            // can send at most 2 messages along a
-            // cross edge
             sendbuf_ = new Cluster[tot_ghosts];
 
             MPI_Info info = MPI_INFO_NULL;
@@ -255,22 +251,23 @@ class Clustering
             {
                 GraphElem e0, e1;
                 g_->edge_range(i, e0, e1);
-                GraphElem target_cluster = -1;
+                GraphElem target_cluster = g_->cluster_[i];
                 GraphWeight upd_mod = 0.0;
 
                 for (GraphElem e = e0; e < e1; e++)
                 {
-                    GraphWeight la2_xup = la2_x;
+                    GraphWeight la2_xup = la2_x; // le_xx will be unchanged
                     Edge const& edge = g_->get_edge(e);
 
                     if (g_->owner(edge.tail_) == rank_)
                     {
                         GraphElem curr_degree = g_->cluster_degree_[i];
                         curr_degree += g_->cluster_degree_[g_->global_to_local(edge.tail_)];
-                        la2_xup += (curr_degree * curr_degree) - (g_->cluster_degree_[i] * g_->cluster_degree_[i]);
+                        la2_xup += static_cast<GraphWeight>(curr_degree) * static_cast<GraphWeight>(curr_degree) 
+                            - static_cast<GraphWeight>(g_->cluster_degree_[i]) * static_cast<GraphWeight>(g_->cluster_degree_[i]);
                     }
                     else
-                        la2_xup -= (g_->cluster_degree_[i] * g_->cluster_degree_[i]);
+                        la2_xup -= static_cast<GraphWeight>(g_->cluster_degree_[i]) * static_cast<GraphWeight>(g_->cluster_degree_[i]);
 
                     upd_mod = std::fabs((le_xx * constant_term) - (la2_xup * constant_term * constant_term));
 
@@ -282,8 +279,9 @@ class Clustering
                 }
 
                 // adjust cluster degree and weight
-                if (target_cluster != -1)
+                if (target_cluster != g_->cluster_[i])
                 {
+                    g_->cluster_[i] = target_cluster;
                     const int target = g_->owner(target_cluster);
                     if (target == rank_)
                     {

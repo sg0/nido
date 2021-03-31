@@ -26,6 +26,9 @@ struct Cluster
     GraphWeight weight_;
     
     Cluster(): vid_(-1), degree_(0), weight_(0.0) {}
+    Cluster(GraphElem vid, GraphElem degree, GraphWeight weight): 
+        vid_(vid), degree_(degree), weight_(weight) 
+    {}
 };
 
 class Clustering
@@ -254,19 +257,19 @@ class Clustering
             for (GraphElem i = 0; i < lnv; i++)
             {
                 GraphElem e0, e1;
-                g->edge_range(i, e0, e1);
+                g_->edge_range(i, e0, e1);
                 GraphElem target_cluster = -1;
                 GraphWeight upd_mod = 0.0;
 
                 for (GraphElem e = e0; e < e1; e++)
                 {
                     GraphWeight la2_xup = la2_x;
-                    Edge const& edge = g->get_edge(e);
+                    Edge const& edge = g_->get_edge(e);
 
-                    if (g->owner(edge.tail_) == rank_)
+                    if (g_->owner(edge.tail_) == rank_)
                     {
                         GraphElem curr_degree = g_->cluster_degree_[i];
-                        curr_degree += g_->cluster_degree_[g->global_to_local(edge.tail_)];
+                        curr_degree += g_->cluster_degree_[g_->global_to_local(edge.tail_)];
                         la2_xup += (curr_degree * curr_degree) - (g_->cluster_degree_[i] * g_->cluster_degree_[i]);
                     }
                     else
@@ -288,7 +291,7 @@ class Clustering
                     if (target == rank_)
                     {
                         g_->cluster_degree_[g_->global_to_local(target_cluster)] += g_->cluster_degree_[i];
-                        g_->cluster_weight_[g->global_to_local(target_cluster)] += g_->cluster_weight_[i];
+                        g_->cluster_weight_[g_->global_to_local(target_cluster)] += g_->cluster_weight_[i];
                     }
                     else
                     {
@@ -296,7 +299,8 @@ class Clustering
                         const GraphElem curr_count = scounts_[pidx];
                         const GraphElem index = nghosts_target_indices_[pidx] + curr_count;
 
-                        sendbuf_[index] = {target_cluster, g_->cluster_degree_[i], g_->cluster_weight_[i]};
+                        Cluster clust(target_cluster, g_->cluster_degree_[i], g_->cluster_weight_[i]);
+                        sendbuf_[index] = clust; 
                         scounts_[pidx]++;
                     }
                  
@@ -333,8 +337,8 @@ class Clustering
             GraphWeight le_la_xx[2];
             GraphWeight e_a_xx[2] = {0.0, 0.0};
             GraphWeight le_xx = 0.0, la2_x = 0.0;
-            GraphElem *cluster_degree = g_->cluster_degree_;
-            GraphWeight *cluster_weight = g_->cluster_weight_;
+            GraphElem *cluster_degree = g_->cluster_degree_.data();
+            GraphWeight *cluster_weight = g_->cluster_weight_.data();
 
 #ifdef OMP_SCHEDULE_RUNTIME
 #pragma omp parallel for default(shared), shared(cluster_weight, cluster_degree), \

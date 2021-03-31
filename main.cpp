@@ -12,6 +12,10 @@
 
 #include "clustering.hpp"
 
+#if defined(SCOREP_USER_ENABLE)
+#include <scorep/SCOREP_User.h>
+#endif
+
 static std::string inputFileName;
 static int me, nprocs;
 static int ranksPerNode = 1;
@@ -123,18 +127,29 @@ int main(int argc, char **argv)
     Clustering cl(g);
 
     MPI_Barrier(MPI_COMM_WORLD);
-    
+#if defined(SCOREP_USER_ENABLE)
+    SCOREP_RECORDING_ON();
+    SCOREP_USER_REGION_BY_NAME_BEGIN("Clustering-First-Phase", SCOREP_USER_REGION_TYPE_COMMON);
+    if (me == 0)
+        SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_WallTime_Clustering", SCOREP_USER_REGION_TYPE_COMMON);
+#endif
     t0 = MPI_Wtime();
 
     int iters = cl.run_louvain(mod);
+
+#if defined(SCOREP_USER_ENABLE)
+    if (me == 0)
+        SCOREP_USER_REGION_BY_NAME_END("TRACER_WallTime_Clustering");
+    SCOREP_USER_REGION_BY_NAME_END("Clustering-First-Phase");
+    SCOREP_RECORDING_OFF();
+#endif
 
     MPI_Barrier(MPI_COMM_WORLD);
     
     t1 = MPI_Wtime();
     double p_tot = t1 - t0, t_tot = 0.0;
     
-    MPI_Reduce(&p_tot, &t_tot, 1, MPI_DOUBLE, 
-            MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&p_tot, &t_tot, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
     if (me == 0) 
     {

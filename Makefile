@@ -1,15 +1,16 @@
-CXX = icpc
-MPICXX = mpicxx
+CXX = mpicxx
+
+USE_TAUPROF=0
+ifeq ($(USE_TAUPROF),1)
+TAU=/soft/perftools/tau/tau-2.29/craycnl/lib
+CXX = tau_cxx.sh -tau_makefile=$(TAU)/Makefile.tau-intel-papi-mpi-pdt 
+endif
 
 # use -xmic-avx512 instead of -xHost for Intel Xeon Phi platforms
-OPTFLAGS = -O3 -xHost -DPRINT_DIST_STATS -DPRINT_EXTRA_NEDGES
-# -DPRINT_EXTRA_NEDGES prints extra edges when -p <> is passed to 
-#  add extra edges randomly on a generated graph
+OPTFLAGS = -O3 -fopenmp -DPRINT_DIST_STATS 
 # use export ASAN_OPTIONS=verbosity=1 to check ASAN output
-SNTFLAGS = -std=c++11 -fsanitize=address -O1 -fno-omit-frame-pointer
-CXXFLAGS = -std=c++11 -g -I. $(OPTFLAGS)
-CXXFLAGS_THREADS = -qopenmp -DUSE_SHARED_MEMORY -DGRAPH_FT_LOAD=4 #-DEDGE_AS_VERTEX_PAIR #-DENABLE_PREFETCH 
-CXXFLAGS_MPI = 
+SNTFLAGS = -std=c++11 -fopenmp -fsanitize=address -O1 -fno-omit-frame-pointer
+CXXFLAGS = -std=c++11 -g $(OPTFLAGS)
 
 ENABLE_DUMPI_TRACE=0
 ENABLE_SCOREP_TRACE=0
@@ -22,49 +23,18 @@ else ifeq ($(ENABLE_SCOREP_TRACE),1)
 	LDAPP = $(SCOREP_INSTALL_PATH)/bin/scorep --user --nocompiler --noopenmp --nopomp --nocuda --noopenacc --noopencl --nomemory
 endif
 
-ENABLE_SSTMACRO=0
-ifeq ($(ENABLE_SSTMACRO),1)
-    SSTPATH = $(HOME)/builds/sst-macro
-    CXX = $(SSTPATH)/bin/sst++
-    CXXFLAGS += -fPIC -DSSTMAC -I$(SSTPATH)/include
-    LDFLAGS = -Wl,-rpath,$(SSTPATH)/lib -L$(SSTPATH)/lib
-endif
+OBJ = main.o
+TARGET = nido 
 
-# https://software.llnl.gov/Caliper/services.html
-ENABLE_LLNL_CALIPER=0
-ifeq ($(ENABLE_LLNL_CALIPER), 1)
-CALI_PATH = $(HOME)/builds/caliper
-CXXFLAGS += -DLLNL_CALIPER_ENABLE -I$(CALI_PATH)/include
-LDFLAGS = -Wl,-rpath,$(CALI_PATH)/lib -L$(CALI_PATH)/lib -lcaliper
-endif
+all: $(TARGET)
 
-OBJ_MPI = main.o
-SRC_MPI = main.cpp
-TARGET_MPI = neve_mpi 
-OBJ_THREADS = main_threads.o
-SRC_THREADS = main_threads.cpp
-TARGET_THREADS = neve_threads
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c -o $@ $^
 
-OBJS = $(OBJ_MPI) $(OBJ_THREADS)
-TARGETS = $(TARGET_MPI) $(TARGET_THREADS)
+$(TARGET):  $(OBJ)
+	$(CXX) $^ $(OPTFLAGS) -o $@
 
-all: $(TARGETS)
-mpi: $(TARGET_MPI)
-threads: $(TARGET_THREADS)
-
-$(TARGET_MPI):  $(OBJ_MPI)
-	$(LDAPP) $(MPICXX) -o $@ $+ $(LDFLAGS) $(CXXFLAGS) 
-
-$(OBJ_MPI): $(SRC_MPI)
-	$(MPICXX) $(INCLUDE) $(CXXFLAGS) -c $< -o $@
-
-$(TARGET_THREADS):  $(OBJ_THREADS)
-	$(LDAPP) $(CXX) $(CXXFLAGS_THREADS) -o $@ $+ $(LDFLAGS) $(CXXFLAGS) 
-
-$(OBJ_THREADS): $(SRC_THREADS)
-	$(CXX) $(INCLUDE) $(CXXFLAGS) $(CXXFLAGS_THREADS) -c $< -o $@
-
-.PHONY: clean mpi threads
+.PHONY: clean
 
 clean:
-	rm -rf *~ *.dSYM nc.vg.* $(OBJS) $(TARGETS)
+	rm -rf *~ $(OBJ) $(TARGET)

@@ -80,7 +80,15 @@ class Clustering
             nghosts_target_indices_.resize(degree_);          
             rdispls_.resize(degree_);
             nbr_cluster_degree_.resize(degree_, 0);
-            
+ 
+            MPI_Info info = MPI_INFO_NULL;
+
+#if defined(USE_MPI_ACCUMULATE)
+            MPI_Info_create(&info);
+            MPI_Info_set(info, "accumulate_ordering", "none");
+            MPI_Info_set(info, "accumulate_ops", "same_op");
+#endif           
+
             // window for storing cluster IDs
             MPI_Win_allocate(lnv*sizeof(GraphElem), 
                     sizeof(GraphElem), info, comm_, &cwinbuf_, &cwin_);             
@@ -96,7 +104,7 @@ class Clustering
                 g_->edge_range(i, e0, e1);
                 
                 // initialize cluster id window
-                cwinbuf_[i] = local_to_global(i);
+                cwinbuf_[i] = g_->local_to_global(i);
 
                 for (GraphElem e = e0; e < e1; e++)
                 {
@@ -129,14 +137,6 @@ class Clustering
             
             // initialize input buffer
             sendbuf_ = new Cluster[tot_ghosts];
-
-            MPI_Info info = MPI_INFO_NULL;
-
-#if defined(USE_MPI_ACCUMULATE)
-            MPI_Info_create(&info);
-            MPI_Info_set(info, "accumulate_ordering", "none");
-            MPI_Info_set(info, "accumulate_ops", "same_op");
-#endif
             
             // window for storing cluster degrees and weights
             MPI_Win_allocate(tot_ghosts*sizeof(Cluster), 
@@ -219,6 +219,7 @@ class Clustering
             GraphWeight mod = -1.0;
             int iters = 0;
             const GraphElem lnv = g_->get_lnv();
+            GraphWeight constant_term = 1.0 / g_->get_sum_weights();
 
             while(true) 
             {
@@ -331,7 +332,7 @@ class Clustering
             {
                 GraphElem e0, e1;
                 g_->edge_range(i, e0, e1);
-                GraphElem target_cluster = g_->cluster_[i];
+                GraphElem target_cluster;
                 bool is_shifting = false;
                 int target_cluster_rank = MPI_PROC_NULL;
 

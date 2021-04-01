@@ -38,7 +38,7 @@ class Clustering
 
         Clustering (Graph* g): 
             g_(g), targets_(0), sendbuf_(0), nbcomm_(MPI_COMM_NULL),
-            nghosts_in_target_(0), nghosts_target_indices_(0), 
+            sum_weights_(0.0), nghosts_in_target_(0), nghosts_target_indices_(0), 
             pindex_(0), degree_(-1), scounts_(0), rcounts_(0), 
             rdispls_(0), nwin_(MPI_WIN_NULL), winbuf_(nullptr),
             nbr_cluster_degree_(0)
@@ -97,6 +97,7 @@ class Clustering
             // populate counter that tracks number
             // of ghosts not owned by me
             GraphElem tot_ghosts = 0;
+            GraphWeight weight_sum = 0.0;
 
             for (GraphElem i = 0; i < lnv; i++)
             {
@@ -116,8 +117,12 @@ class Clustering
                         nghosts_in_target_[pindex_[target]] += 1;
                         tot_ghosts += 1;
                     }
+
+                    weight_sum += edge.weight_;
                 }                
             }
+
+            MPI_Allreduce(&weight_sum, &sum_weights_, 1, MPI_WEIGHT_TYPE, MPI_SUM, comm_);
             
             Cluster clust;
             MPI_Aint begin, origin, vid, degree, weight;
@@ -187,6 +192,9 @@ class Clustering
             MPI_Type_free(&mpi_cluster_t_);
         }
 
+        GraphWeight get_sum_weights() const 
+        { return sum_weights_; }
+
         void update_nbr_cluster_degree(MPI_Request *req)
         {
             const GraphElem lnv = g_->get_lnv();
@@ -219,7 +227,7 @@ class Clustering
             GraphWeight mod = -1.0;
             int iters = 0;
             const GraphElem lnv = g_->get_lnv();
-            GraphWeight constant_term = 1.0 / g_->get_sum_weights();
+            GraphWeight constant_term = 1.0 / get_sum_weights();
 
             while(true) 
             {
@@ -325,7 +333,7 @@ class Clustering
         void louvain_iteration(GraphWeight mod)
         {
             const GraphElem lnv = g_->get_lnv();
-            GraphWeight constant_term = 1.0 / g_->get_sum_weights();
+            GraphWeight constant_term = 1.0 / get_sum_weights();
             
             // calculate delta-q and determine target community
             for (GraphElem i = 0; i < lnv; i++)
@@ -341,7 +349,7 @@ class Clustering
                     GraphWeight upd_mod = mod;
                     Edge const& edge = g_->get_edge(e);
                     GraphElem curr_degree = g_->cluster_degree_[i];
-                    GraphElem past_ac = static_cast<GraphWeight>(curr_degree) * static_cast<GraphWeight>(curr_degree);
+                    GraphWeight past_ac = static_cast<GraphWeight>(curr_degree) * static_cast<GraphWeight>(curr_degree);
                     upd_mod -= static_cast<GraphWeight>(past_ac) * constant_term * constant_term;
 
                     const int target = g_->owner(edge.tail_);
@@ -354,6 +362,8 @@ class Clustering
                         * static_cast<GraphWeight>(curr_degree) 
                         * constant_term 
                         * constant_term; 
+                    
+                    std::cout << "Updated modularity: " << upd_mod << std::endl;
 
                     if ((upd_mod - mod) > 0.0)
                     {
@@ -419,7 +429,7 @@ class Clustering
         GraphWeight modularity()
         {
             const GraphElem lnv = g_->get_lnv();
-            GraphWeight tot_weights = g_->get_sum_weights();
+            GraphWeight tot_weights = get_sum_weights();
             GraphWeight constant_term = 1.0 / (GraphWeight)2.0 * tot_weights;
             GraphWeight le_la_xx[2];
             GraphWeight e_a_xx[2] = {0.0, 0.0};
@@ -456,6 +466,7 @@ class Clustering
         std::unordered_map<int, GraphElem> pindex_;                    
         Cluster *sendbuf_, *winbuf_;
         GraphElem *cwinbuf_;
+        GraphWeight sum_weights_;
 
         std::vector<int> targets_;
         std::vector<GraphElem> scounts_, rcounts_;

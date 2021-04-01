@@ -127,25 +127,9 @@ class Graph
         // cluster specific initializations
         void cluster_alloc_fill()
         {
-            cluster_degree_.resize(lnv_, 0);
+            cluster_degree_.resize(lnv_);
             cluster_weight_.resize(lnv_, 0.0);
-           
-            GraphWeight sum = 0.0;
-#pragma omp parallel for reduction(+:sum)
-            for (GraphElem i = 0; i < lnv_; i++)
-            {
-                GraphElem e0, e1;
-                edge_range(i, e0, e1);
-                cluster_degree_[i] = e1 - e0 + 1;
-                for (GraphElem e = e0; e < e1; e++)
-                {
-                    Edge const& edge = get_edge(e);
-                    cluster_weight_[i] += edge.weight_;
-                    sum += edge.weight_;
-                }
-            }
-
-            MPI_Allreduce(&sum, &sum_weights_, 1, MPI_WEIGHT_TYPE, MPI_SUM, comm_);
+            std::fill(cluster_degree_.begin(), cluster_degree_.end(), 1);
         }
          
         // update vertex partition information

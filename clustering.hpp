@@ -21,13 +21,14 @@
 
 struct Cluster
 {
+    int origin_;
     GraphElem vid_;
     GraphElem degree_;
     GraphWeight weight_;
     
-    Cluster(): vid_(-1), degree_(0), weight_(0.0) {}
-    Cluster(GraphElem vid, GraphElem degree, GraphWeight weight): 
-        vid_(vid), degree_(degree), weight_(weight) 
+    Cluster(): origin_(-1), vid_(0), degree_(0), weight_(0.0) {}
+    Cluster(int origin, GraphElem vid, GraphElem degree, GraphWeight weight): 
+        origin_(origin), vid_(vid), degree_(degree), weight_(weight) 
     {}
 };
 
@@ -36,16 +37,16 @@ class Clustering
     public:
 
         Clustering (Graph* g): 
-            g_(g), targets_(0), sendbuf_(0),
+            g_(g), targets_(0), sendbuf_(0), nbcomm_(MPI_COMM_NULL),
             nghosts_in_target_(0), nghosts_target_indices_(0), 
             pindex_(0), degree_(-1), scounts_(0), rcounts_(0), 
-            rdispls_(0), nwin_(MPI_WIN_NULL), winbuf_(nullptr)
+            rdispls_(0), nwin_(MPI_WIN_NULL), winbuf_(nullptr),
+            nbr_cluster_degree_(0)
         {
             comm_ = g_->get_comm();
             MPI_Comm_size(comm_, &size_);
             MPI_Comm_rank(comm_, &rank_);
 
-            // neighborhood communicator
             const GraphElem lnv = g_->get_lnv();
             for (GraphElem v = 0; v < lnv; v++)
             {
@@ -74,15 +75,17 @@ class Clustering
 
             for (int i = 0; i < degree_; i++)
                 pindex_.insert({targets_[i], (GraphElem)i}); 
-
+            
             nghosts_in_target_.resize(degree_);
             nghosts_target_indices_.resize(degree_);          
             rdispls_.resize(degree_);
-            std::vector<GraphElem> out_nbr_cluster_degree(degree_);
-            std::vector<GraphWeight> out_nbr_cluster_weight(degree_);
             nbr_cluster_degree_.resize(degree_, 0);
-            nbr_cluster_weight_.resize(degree_, 0.0);
             
+            // window for storing cluster IDs
+            MPI_Win_allocate(lnv*sizeof(GraphElem), 
+                    sizeof(GraphElem), info, comm_, &cwinbuf_, &cwin_);             
+            MPI_Win_lock_all(MPI_MODE_NOCHECK, cwin_);
+
             // populate counter that tracks number
             // of ghosts not owned by me
             GraphElem tot_ghosts = 0;
@@ -91,6 +94,9 @@ class Clustering
             {
                 GraphElem e0, e1;
                 g_->edge_range(i, e0, e1);
+                
+                // initialize cluster id window
+                cwinbuf_[i] = local_to_global(i);
 
                 for (GraphElem e = e0; e < e1; e++)
                 {
@@ -99,28 +105,26 @@ class Clustering
 
                     if (target != rank_)
                     {
-                        // TODO FIXME bypass repeated assignments
-                        nbr_cluster_degree_[pindex_[target]] = g_->cluster_degree_[i];
-                        nbr_cluster_weight_[pindex_[target]] = g_->cluster_weight_[i];
                         nghosts_in_target_[pindex_[target]] += 1;
                         tot_ghosts += 1;
                     }
                 }                
             }
-
+            
             Cluster clust;
-            MPI_Aint begin, id, degree, weight;
+            MPI_Aint begin, origin, vid, degree, weight;
 
             MPI_Get_address(&clust, &begin);
-            MPI_Get_address(&clust.vid_, &id);
+            MPI_Get_address(&clust.origin_, &origin);
+            MPI_Get_address(&clust.vid_, &vid);
             MPI_Get_address(&clust.degree_, &degree);
             MPI_Get_address(&clust.weight_, &weight);
 
-            int blens[] = { 1, 1, 1 };
-            MPI_Aint displ[] = { id - begin, degree - begin, weight - begin };
-            MPI_Datatype types[] = { MPI_GRAPH_TYPE, MPI_GRAPH_TYPE, MPI_WEIGHT_TYPE };
+            int blens[] = { 1, 1, 1, 1 };
+            MPI_Aint displ[] = { origin - begin, vid - begin, degree - begin, weight - begin };
+            MPI_Datatype types[] = { MPI_INT, MPI_GRAPH_TYPE, MPI_GRAPH_TYPE, MPI_WEIGHT_TYPE };
 
-            MPI_Type_create_struct(3, blens, displ, types, &mpi_cluster_t_);
+            MPI_Type_create_struct(4, blens, displ, types, &mpi_cluster_t_);
             MPI_Type_commit(&mpi_cluster_t_);
             
             // initialize input buffer
@@ -133,10 +137,10 @@ class Clustering
             MPI_Info_set(info, "accumulate_ordering", "none");
             MPI_Info_set(info, "accumulate_ops", "same_op");
 #endif
-
+            
+            // window for storing cluster degrees and weights
             MPI_Win_allocate(tot_ghosts*sizeof(Cluster), 
                     sizeof(Cluster), info, comm_, &winbuf_, &nwin_);             
-
             MPI_Win_lock_all(MPI_MODE_NOCHECK, nwin_);
 
             // exclusive scan to compute remote 
@@ -155,14 +159,6 @@ class Clustering
             // set neighbor alltoall params
             scounts_.resize(degree_, 0);
             rcounts_.resize(degree_, 0); 
-
-            // neighbor's cluster weights and degrees
-            MPI_Neighbor_alltoall(out_nbr_cluster_degree.data(), 1, 
-                    MPI_GRAPH_TYPE, nbr_cluster_degree_.data(), 1, 
-                    MPI_GRAPH_TYPE, nbcomm_);
-            MPI_Neighbor_alltoall(out_nbr_cluster_weight.data(), 1, 
-                    MPI_WEIGHT_TYPE, nbr_cluster_weight_.data(), 1, 
-                    MPI_WEIGHT_TYPE, nbcomm_);
         }
 
         ~Clustering() {}
@@ -179,15 +175,42 @@ class Clustering
             nghosts_target_indices_.clear();
             pindex_.clear();
             nbr_cluster_degree_.clear();
-            nbr_cluster_weight_.clear();
 
             delete []sendbuf_;
 
             MPI_Win_unlock_all(nwin_);
             MPI_Win_free(&nwin_);
-
+            MPI_Win_unlock_all(cwin_);
+            MPI_Win_free(&cwin_);
+            
             MPI_Comm_free(&nbcomm_);
             MPI_Type_free(&mpi_cluster_t_);
+        }
+
+        void update_nbr_cluster_degree(MPI_Request *req)
+        {
+            const GraphElem lnv = g_->get_lnv();
+            std::vector<GraphElem> out_nbr_cluster_degree(degree_);
+            
+            for (GraphElem i = 0; i < lnv; i++)
+            {
+                GraphElem e0, e1;
+                g_->edge_range(i, e0, e1);
+
+                for (GraphElem e = e0; e < e1; e++)
+                {
+                    Edge const& edge = g_->get_edge(e);
+                    const int target = g_->owner(edge.tail_);
+
+                    if (target != rank_)
+                        out_nbr_cluster_degree[pindex_[target]] = g_->cluster_degree_[i];
+                }                
+            }
+
+            // neighbor's cluster degrees
+            MPI_Ineighbor_alltoall(out_nbr_cluster_degree.data(), 1, 
+                    MPI_GRAPH_TYPE, nbr_cluster_degree_.data(), 1, 
+                    MPI_GRAPH_TYPE, nbcomm_, req);
         }
 
         int run_louvain(GraphWeight& iter_mod, GraphWeight lower = -1.0, GraphWeight thresh = 1.0E-06)
@@ -195,15 +218,21 @@ class Clustering
             GraphWeight prev_mod = lower;
             GraphWeight mod = -1.0;
             int iters = 0;
+            const GraphElem lnv = g_->get_lnv();
 
             while(true) 
             {
+                MPI_Request req;
+                
                 MPI_Win_flush_all(nwin_);
 
                 rcounts_.clear();
                 MPI_Neighbor_alltoall(scounts_.data(), 1, MPI_GRAPH_TYPE, 
                         rcounts_.data(), 1, MPI_GRAPH_TYPE, nbcomm_);
-
+                
+                // to store incoming cluster info
+                std::vector<std::array<GraphElem, 3>> origin_clusters; 
+                
                 // fetch cluster info and update local clusters
                 for (int k = 0; k < degree_; k++)
                 {
@@ -212,11 +241,52 @@ class Clustering
                     for (GraphElem i = 0; i < rcounts_[k]; i++)
                     {
                         Cluster clust = winbuf_[index + i];
-                        const GraphElem vid = g_->global_to_local(clust.vid_);
-                        g_->cluster_degree_[vid] += clust.degree_;
-                        g_->cluster_weight_[vid] += clust.weight_;
+                        GraphWeight upd_mod = mod;
+                        GraphElem target_cluster = -1;
+                        
+                        // find target cluster
+                        for (GraphElem v = 0; v < lnv; v++)
+                        {
+                            GraphElem curr_degree = g_->cluster_degree_[v];
+                            GraphElem past_ac = static_cast<GraphWeight>(curr_degree) * static_cast<GraphWeight>(curr_degree);
+                            upd_mod -= static_cast<GraphWeight>(past_ac) * constant_term * constant_term;
+                            curr_degree += clust.degree_;
+
+                            upd_mod += static_cast<GraphWeight>(curr_degree) 
+                                * static_cast<GraphWeight>(curr_degree) 
+                                * constant_term 
+                                * constant_term; 
+                        
+                            if ((upd_mod - mod) > 0.0)
+                            {
+                                mod = upd_mod;
+                                target_cluster = v;
+                            }
+                        }
+
+                        // update target cluster weight/degree
+                        g_->cluster_degree_[target_cluster] += clust.degree_;
+                        g_->cluster_weight_[target_cluster] += clust.weight_;
+                        
+                        // buffer outgoing cluster ID window data
+                        origin_clusters.push_back({static_cast<GraphElem>(clust.origin_), 
+                                target_cluster, g_->global_to_local(clust.vid_, clust.origin_)});
+                    }
+
+                    // puts to the origin for updating cluster IDs
+                    for (GraphElem i = 0; i < rcounts_[k]; i++)
+                    {
+#if defined(USE_MPI_ACCUMULATE)
+                        MPI_Accumulate(&origin_clusters[i][1], 1, MPI_GRAPH_TYPE, origin_clusters[i][0], 
+                                (MPI_Aint)origin_clusters[i][2], 1, MPI_GRAPH_TYPE, MPI_REPLACE, cwin_);
+#else
+                        MPI_Put(&origin_clusters[i][1], 1, MPI_GRAPH_TYPE, origin_clusters[i][0], 
+                                (MPI_Aint)origin_clusters[i][2], 1, MPI_GRAPH_TYPE, cwin_);
+#endif
                     }
                 }
+
+                update_nbr_cluster_degree(&req);
 
                 // global modularity calculation
                 mod = modularity();
@@ -227,10 +297,14 @@ class Clustering
                 prev_mod = mod;
                 
                 if (prev_mod < lower)
-                    prev_mod = lower;              
+                    prev_mod = lower;        
+
+                MPI_Wait(&req, MPI_STATUS_IGNORE);
     
+                MPI_Win_flush_all(cwin_);
+                
                 // determine target cluster based on local computation 
-                louvain_iteration();
+                louvain_iteration(mod);
 
                 // push out cluster size/degree to process containing 
                 // target clusters for remotely owned vertices
@@ -247,41 +321,27 @@ class Clustering
             return iters;
         }
 
-        void louvain_iteration()
+        void louvain_iteration(GraphWeight mod)
         {
-            GraphWeight le_xx = 0.0, la2_x = 0.0, local_mod, mod;
             const GraphElem lnv = g_->get_lnv();
             GraphWeight constant_term = 1.0 / g_->get_sum_weights();
             
-            // local modularity
-            for (GraphElem i = 0; i < lnv; i++) 
-            {
-                le_xx += g_->cluster_weight_[i];
-                la2_x += static_cast<GraphWeight>(g_->cluster_degree_[i]) * static_cast<GraphWeight>(g_->cluster_degree_[i]); 
-            } 
-
-            mod = std::fabs((le_xx * constant_term) - (la2_x * constant_term * constant_term));
-
-#ifdef DEBUG_MOD_GROWTH
-            if (rank_ == 0)
-                std::cout << "Local modularity (within Louvain iteration): " << mod << std::endl;
-#endif
-
             // calculate delta-q and determine target community
             for (GraphElem i = 0; i < lnv; i++)
             {
                 GraphElem e0, e1;
                 g_->edge_range(i, e0, e1);
                 GraphElem target_cluster = g_->cluster_[i];
-                GraphWeight upd_mod = 0.0;
+                bool is_shifting = false;
+                int target_cluster_rank = MPI_PROC_NULL;
 
                 for (GraphElem e = e0; e < e1; e++)
                 {
+                    GraphWeight upd_mod = mod;
                     Edge const& edge = g_->get_edge(e);
-                    GraphWeight la2_xup = la2_x; // le_xx will be unchanged
                     GraphElem curr_degree = g_->cluster_degree_[i];
-                    
-                    la2_xup -= static_cast<GraphWeight>(g_->cluster_degree_[i]) * static_cast<GraphWeight>(g_->cluster_degree_[i]);
+                    GraphElem past_ac = static_cast<GraphWeight>(curr_degree) * static_cast<GraphWeight>(curr_degree);
+                    upd_mod -= static_cast<GraphWeight>(past_ac) * constant_term * constant_term;
 
                     const int target = g_->owner(edge.tail_);
                     if (target == rank_)
@@ -289,38 +349,47 @@ class Clustering
                     else
                         curr_degree += nbr_cluster_degree_[pindex_[target]];
                         
-                    la2_xup += static_cast<GraphWeight>(curr_degree) * static_cast<GraphWeight>(curr_degree); 
+                    upd_mod += static_cast<GraphWeight>(curr_degree) 
+                        * static_cast<GraphWeight>(curr_degree) 
+                        * constant_term 
+                        * constant_term; 
 
-                    upd_mod = std::fabs((le_xx * constant_term) - (la2_xup * constant_term * constant_term));
-
-                    if (std::fabs(upd_mod - mod) > 0.0)
+                    if ((upd_mod - mod) > 0.0)
                     {
                         mod = upd_mod;
-                        target_cluster = edge.tail_;
+                        
+                        if (target == rank_)
+                            target_cluster = edge.tail_;
+                        else
+                        {
+                            target_cluster = -1;
+                            target_cluster_rank = target;
+                        }
+
+                        is_shifting = true;
                     }
                 }
 
                 // adjust cluster degree and weight
-                if (target_cluster != g_->cluster_[i])
+                if (is_shifting)
                 {
-                    g_->cluster_[i] = target_cluster;
-                    const int target = g_->owner(target_cluster);
-                    if (target == rank_)
+                    if (target_cluster == -1) // remote buffer
                     {
-                        g_->cluster_degree_[g_->global_to_local(target_cluster)] += g_->cluster_degree_[i];
-                        g_->cluster_weight_[g_->global_to_local(target_cluster)] += g_->cluster_weight_[i];
-                    }
-                    else
-                    {
-                        const int pidx = pindex_[target];
+                        const int pidx = pindex_[target_cluster_rank];
                         const GraphElem curr_count = scounts_[pidx];
                         const GraphElem index = nghosts_target_indices_[pidx] + curr_count;
 
-                        Cluster clust(target_cluster, g_->cluster_degree_[i], g_->cluster_weight_[i]);
+                        Cluster clust(rank_, g_->local_to_global(i), g_->cluster_degree_[i], g_->cluster_weight_[i]);
                         sendbuf_[index] = clust; 
                         scounts_[pidx]++;
                     }
-                 
+                    else // local apply
+                    {
+                        cwinbuf_[i] = target_cluster;
+                        g_->cluster_degree_[g_->global_to_local(target_cluster)] += g_->cluster_degree_[i];
+                        g_->cluster_weight_[g_->global_to_local(target_cluster)] += g_->cluster_weight_[i];
+                    }
+
                     g_->cluster_degree_[i] = 0;
                     g_->cluster_weight_[i] = 0.0;
                 }
@@ -385,14 +454,14 @@ class Clustering
         
         std::unordered_map<int, GraphElem> pindex_;                    
         Cluster *sendbuf_, *winbuf_;
+        GraphElem *cwinbuf_;
 
         std::vector<int> targets_;
         std::vector<GraphElem> scounts_, rcounts_;
         int degree_;
         std::vector<GraphElem> nbr_cluster_degree_;
-        std::vector<GraphWeight> nbr_cluster_weight_;
         
-        MPI_Win nwin_; 
+        MPI_Win nwin_, cwin_; 
         std::vector<GraphElem> rdispls_, // target displacement
             nghosts_in_target_,          // ghost vertices in target rank
             nghosts_target_indices_;     // indices of data 

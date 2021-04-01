@@ -120,7 +120,6 @@ class Graph
             edge_list_.clear();
             edge_indices_.clear();
             parts_.clear();
-            cluster_.clear();
             cluster_weight_.clear();
             cluster_degree_.clear();
         }
@@ -128,7 +127,6 @@ class Graph
         // cluster specific initializations
         void cluster_alloc_fill()
         {
-            cluster_.resize(lnv_, 0);
             cluster_degree_.resize(lnv_, 0);
             cluster_weight_.resize(lnv_, 0.0);
            
@@ -139,7 +137,6 @@ class Graph
                 GraphElem e0, e1;
                 edge_range(i, e0, e1);
                 cluster_degree_[i] = e1 - e0 + 1;
-                cluster_[i] = local_to_global(i);
                 for (GraphElem e = e0; e < e1; e++)
                 {
                     Edge const& edge = get_edge(e);
@@ -319,7 +316,7 @@ class Graph
         
         std::vector<GraphElem> edge_indices_;
         std::vector<Edge> edge_list_;
-        std::vector<GraphElem> cluster_, cluster_degree_;
+        std::vector<GraphElem> cluster_degree_;
         std::vector<GraphWeight> cluster_weight_;
     private:
         GraphElem lnv_, lne_, nv_, ne_;

@@ -134,11 +134,11 @@ class Graph
             for (GraphElem v = 0; v < lnv_; v++)
             {
                 GraphElem e0, e1;
-                g_->edge_range(v, e0, e1);
+                edge_range(v, e0, e1);
                 for (GraphElem e = e0; e < e1; e++)
                 {
-                    Edge const& edge = g_->get_edge(e);
-                    cluster_degree_[i] += edge.weight_;
+                    Edge const& edge = get_edge(e);
+                    cluster_degree_[v] += edge.weight_;
                 }
             }
         }

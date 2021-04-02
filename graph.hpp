@@ -127,9 +127,20 @@ class Graph
         // cluster specific initializations
         void cluster_alloc_fill()
         {
-            cluster_degree_.resize(lnv_);
+            cluster_degree_.resize(lnv_, 0);
             cluster_weight_.resize(lnv_, 0.0);
             std::fill(cluster_degree_.begin(), cluster_degree_.end(), 1);
+
+            for (GraphElem v = 0; v < lnv_; v++)
+            {
+                GraphElem e0, e1;
+                g_->edge_range(v, e0, e1);
+                for (GraphElem e = e0; e < e1; e++)
+                {
+                    Edge const& edge = g_->get_edge(e);
+                    cluster_degree_[i] += edge.weight_;
+                }
+            }
         }
          
         // update vertex partition information
@@ -183,7 +194,6 @@ class Graph
 
             return (iter - parts_.begin() - 1);
         }
-        
 
         GraphElem get_lnv() const { return lnv_; }
         GraphElem get_lne() const { return lne_; }

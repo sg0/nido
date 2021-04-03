@@ -299,7 +299,7 @@ class Clustering
                             }
                         }
 
-                        // send back !!!
+                        // send back degree and weight to original cluster
                         if (target_cluster == -1)
                         {
                             // weight

@@ -129,7 +129,6 @@ class Graph
         {
             cluster_degree_.resize(lnv_, 0);
             cluster_weight_.resize(lnv_, 0.0);
-            std::fill(cluster_degree_.begin(), cluster_degree_.end(), 1);
 
             for (GraphElem v = 0; v < lnv_; v++)
             {
@@ -138,7 +137,8 @@ class Graph
                 for (GraphElem e = e0; e < e1; e++)
                 {
                     Edge const& edge = get_edge(e);
-                    cluster_degree_[v] += edge.weight_;
+                    cluster_weight_[v] += edge.weight_;
+                    cluster_degree_[v] += 1;
                 }
             }
         }

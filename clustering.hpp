@@ -254,12 +254,17 @@ class Clustering
         int run_louvain(GraphWeight& iter_mod, GraphWeight lower = -1.0, GraphWeight thresh = 1.0E-06)
         {
             GraphWeight prev_mod = lower;
-            GraphWeight mod = -1.0;
+            GraphWeight mod = lower;
             int iters = 0;
             const GraphElem lnv = g_->get_lnv();
 
             while(true) 
             {
+                iters++;
+
+                if (iters >= DEFAULT_LOUVAIN_ITERS)
+                    break;
+
                 MPI_Request req[2] = {MPI_REQUEST_NULL};
                 
                 MPI_Win_flush_all(nwin_);
@@ -290,7 +295,7 @@ class Clustering
                             eiy = g_->cluster_weight_[v];
                             ay = g_->cluster_degree_[v];
 
-                            curr_gain = 2.0 * (eiy - eix) - 2.0 * sum_weights_ * (ay - ax) * constant_term_;
+                            curr_gain = 2.0 * (eiy - eix) - 2.0 * clust.weight_ * (ay - ax) * constant_term_;
 
                             if (curr_gain >= max_gain) 
                             {
@@ -341,8 +346,18 @@ class Clustering
 
                 MPI_Win_flush_all(dwin_);
                 MPI_Win_flush_all(wwin_);
-
-                // global modularity calculation
+                
+                MPI_Waitall(2, req, MPI_STATUSES_IGNORE);
+                
+                // determine target cluster based on local computation 
+                louvain_iteration();
+    
+                MPI_Win_flush_all(cwin_);
+                
+                // push out cluster size/degree to process containing 
+                // target clusters for remotely owned vertices
+                outstanding_puts();
+ 
                 mod = modularity();
                 
                 if (mod - prev_mod < thresh)
@@ -352,22 +367,6 @@ class Clustering
                 
                 if (prev_mod < lower)
                     prev_mod = lower;        
-
-                MPI_Waitall(2, req, MPI_STATUSES_IGNORE);
-    
-                MPI_Win_flush_all(cwin_);
-                
-                // determine target cluster based on local computation 
-                louvain_iteration();
-
-                // push out cluster size/degree to process containing 
-                // target clusters for remotely owned vertices
-                outstanding_puts();
- 
-                iters++;
-
-                if (iters >= DEFAULT_LOUVAIN_ITERS)
-                    break;
             }
 
             iter_mod = prev_mod;
@@ -385,7 +384,7 @@ class Clustering
                 GraphElem e0, e1;
                 g_->edge_range(i, e0, e1);
 
-                GraphElem target_cluster;
+                GraphElem target_cluster = -1;
 
                 bool is_shifting = false;
                 int target_cluster_rank = MPI_PROC_NULL;
@@ -413,13 +412,13 @@ class Clustering
                         ay = nbr_cluster_degree_[pindex_[target]];
                     }
 
-                    curr_gain = 2.0 * (eiy - eix) - 2.0 * sum_weights_ * (ay - ax) * constant_term_;
+                    curr_gain = 2.0 * (eiy - eix) - 2.0 * g_->cluster_weight_[i] * (ay - ax) * constant_term_;
 
                     if (curr_gain >= max_gain) 
                     {
                         max_gain = curr_gain;
                         target_cluster_rank = target;
-                        target_cluster = ((target == rank_) ? edge.tail_ : -1);
+                        target_cluster = ((target_cluster_rank == rank_) ? edge.tail_ : -1);
                         is_shifting = true;
                     }
                 }

@@ -306,6 +306,7 @@ class Clustering
                             MPI_Accumulate(&winbuf_[nghosts_target_indices_[k] + i].weight_, 1, MPI_WEIGHT_TYPE, 
                                     clust.origin_, (MPI_Aint)g_->global_to_local(clust.vid_, clust.origin_), 
                                     1, MPI_WEIGHT_TYPE, MPI_SUM, wwin_);
+                            
                             // degree
                             MPI_Accumulate(&winbuf_[nghosts_target_indices_[k] + i].degree_, 1, MPI_GRAPH_TYPE, 
                                     clust.origin_, (MPI_Aint)g_->global_to_local(clust.vid_, clust.origin_), 

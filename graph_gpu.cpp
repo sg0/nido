@@ -63,8 +63,7 @@ numEdgesHost_(nullptr), sortedIndicesHost_(nullptr)
     orders_ptr = thrust::device_pointer_cast(indexOrders_);
     keys_ptr   = thrust::device_pointer_cast(commIdKeys_);
     #ifdef MULTIPHASE
-    //commIds_ptr       = thrust::device_pointer_cast(commIds);
-    //vertex_orders_ptr = thrust::device_pointer_cast(newCommIds);
+    clusters_ = new Clustering(nv_);
     buffer_ = malloc(unit_size*ne_);
     CudaMallocHost(vertexIdsHost_, sizeof(GraphElem)*nv_);
     CudaMallocHost(numEdgesHost_,  sizeof(GraphElem)*nv_);
@@ -539,6 +538,8 @@ bool GraphGPU::aggregation()
 
     if(nv == nv_ || nv == 1)
         return true;
+
+    clusters_->move_community_to_host(commIds_, nv_, cuStreams[3]);
     //std::cout << "new vertex number " << nv << std::endl;
     //if not done, proceed to the next step
     //second step
@@ -552,6 +553,8 @@ bool GraphGPU::aggregation()
 
     CudaMemset(vertexWeights_, 0, sizeof(GraphWeight)*nv_);
     CudaMemset(commWeights_, 0, sizeof(GraphWeight)*nv_);
+
+    clusters_->update_clustering();
 
     maxOrder_ = max_order();
     //std::cout << "max order is " << maxOrder_ << std::endl;

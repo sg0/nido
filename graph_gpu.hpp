@@ -5,6 +5,9 @@
 #include "types.hpp"
 #include "graph.hpp"
 #include "cuda_wrapper.hpp"
+#ifdef MULTIPHASE
+#include "clustering.hpp"
+#endif
 class GraphGPU
 {
   private:
@@ -87,6 +90,8 @@ class GraphGPU
     (
         GraphElem* numEdges
     );
+
+    Clustering* clusters_;
 
     #endif
   public:

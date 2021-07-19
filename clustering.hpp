@@ -1,54 +1,38 @@
 #ifndef CLUSTERING_HPP
 #define CLUSTERING_HPP
-
+#include "cuda_wrapper.hpp"
 #include "types.hpp"
-
-struct Vertex
-{
-    GraphElem v;
-    struct Vertex* next;
-};
-
-typedef struct Vertex Vertex;
 
 class Clustering
 {
   private:
 
     GraphElem nv_;
-    Vertex** vertex_list_;
-    Vertex** community_list_;
-
-    GraphElem* vertexIds_, *vertexOffsets_;
+    GraphElem* commIds_;
+    GraphElem* commIdsHost_;
+    void singleton_partition();
 
   public:
     Clustering(const GraphElem& nv) : nv_(nv)
     {
-        vertex_list_    = new Vertex* [nv_];
-        community_list_ = new Vertex* [nv_];
-        vertexIds_      = new GraphElem [nv_];
-        vertexOffsets_  = new GraphElem [nv_];
-
-        for(GraphElem i = 0; i < nv_; ++i)
-        {
-            Vertex* vertex = new Vertex;
-            vertex->v = i; vertex->next = nullptr;
-            vertex_list_[i] = vertex;
-        }
-        for(GraphElem i = 0; i < nv_; ++i)
-            community_list_[i] = nullptr;
+        commIds_ = new GraphElem [nv_];
+        CudaMallocHost(commIdsHost_, sizeof(GraphElem)*nv_);
+        singleton_partition();
     }
-    ~Clustering();
-    void singleton_partition()
+    ~Clustering()
     {
-        for(GraphElem i = 0; i < nv_; ++i)
-            community_list_[i] = vertex_list_[i];
+        delete [] commIds_;
+        CudaFreeHost(commIdsHost_);
     }
-    void aggregate_vertex
+    void move_community_to_host
     (
-        GraphElem* vertexIds_dev, 
-        GraphElem* vertexOffsets_dev,
-        const GraphElem& newNv
-    );
+        GraphElem* commIds, 
+        const GraphElem& nv, 
+        cudaStream_t stream = 0
+    )
+    {
+        CudaMemcpyAsyncDtoH(commIdsHost_, commIds, sizeof(GraphElem)*nv, stream);
+    }
+    void update_clustering();
 };
 #endif

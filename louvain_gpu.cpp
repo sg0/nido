@@ -74,12 +74,11 @@ void LouvainGPU::run(GraphGPU* graph)
                 }
                 //CudaDeviceSynchronize();
             }
-            graph->update_community_ids();
             Float Qtmp = graph->compute_modularity();
             dQ = Qtmp - Q;
             loops++;
             if(dQ < 0)
-                graph->update_community_ids();
+                graph->restore_community_ids();
             else
                 Q = Qtmp; 
             std::cout << loops << " \t" << Qtmp << " \t" << dQ << std::endl;

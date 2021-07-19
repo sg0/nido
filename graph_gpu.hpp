@@ -126,7 +126,7 @@ class GraphGPU
     void move_weights_to_device(const GraphElem& v0, const GraphElem& v1, cudaStream_t stream = 0);
     void move_weights_to_host(const GraphElem& v0, const GraphElem& v1, cudaStream_t stream = 0);
 
-    void update_community_ids();
+    void restore_community_ids();
 
     #ifdef MULTIPHASE
     bool aggregation();

@@ -168,6 +168,16 @@ void update_commids_cuda
     cudaStream_t stream = 0
 );
 
+void update_community_weights_cuda
+(
+    GraphElem* commIds,
+    GraphElem* newCommIds,
+    GraphWeight* commWeights,
+    GraphWeight* vertexWeights,
+    const GraphElem& nv,
+    cudaStream_t stream = 0
+);
+
 GraphWeight compute_mass_cuda
 (
     GraphWeight* vertexWeights,

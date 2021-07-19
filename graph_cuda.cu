@@ -672,7 +672,8 @@ void update_commids_kernel
             GraphWeight ki = vertexWeights[v];
             atomicAdd(commWeights+src, -ki);
             atomicAdd(commWeights+dest, ki);
-            commIds[v] = dest;        
+            commIds[v] = dest;
+            newCommIds[v] = src;        
         } 
     }
 }
@@ -693,6 +694,47 @@ void update_commids_cuda
 
     CudaLaunch((update_commids_kernel<BLOCKDIM02><<<nblocks, BLOCKDIM02, 0, stream>>>
     (commIds,newCommIds,commWeights, vertexWeights, v0, v1)));
+}
+
+template<const int BlockSize>
+__global__
+void update_community_weights_kernel
+(
+    GraphElem*   __restrict__ commIds,
+    GraphElem*   __restrict__ newCommIds,
+    GraphWeight* __restrict__ commWeights,
+    GraphWeight* __restrict__ vertexWeights,
+    const GraphElem nv
+)
+{
+    for(GraphElem v = threadIdx.x + BlockSize*blockIdx.x; v < nv; v += BlockSize*gridDim.x)
+    {
+        GraphElem src = commIds[v];
+        GraphElem dest = newCommIds[v];
+        if(src != dest)
+        {
+            GraphWeight ki = vertexWeights[v];
+            atomicAdd(commWeights+src, -ki);
+            atomicAdd(commWeights+dest, ki);
+        }
+    }
+}
+
+void update_community_weights_cuda
+(
+    GraphElem* commIds, 
+    GraphElem* newCommIds, 
+    GraphWeight* commWeights, 
+    GraphWeight* vertexWeights, 
+    const GraphElem& nv,
+    cudaStream_t stream = 0
+)
+{
+    long long nblocks = (nv+BLOCKDIM02-1)/BLOCKDIM02;
+    nblocks = (nblocks > MAX_GRIDDIM) ? MAX_GRIDDIM : nblocks;
+
+    CudaLaunch((update_community_weights_kernel<BLOCKDIM02><<<nblocks, BLOCKDIM02, 0, stream>>>
+    (commIds,newCommIds,commWeights, vertexWeights, nv)));
 }
 
 template<const int BlockSize, const int WarpSize, const int TileSize>

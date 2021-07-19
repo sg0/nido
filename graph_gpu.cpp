@@ -244,14 +244,16 @@ void GraphGPU::louvain_update
     GraphElem ne = e1-e0;
     louvain_update_cuda(((GraphElem*)commIdKeys_), ((GraphElem*)commIdKeys_)+ne, edges_+e0_local, edgeWeights_+e0_local,
                         indices_, vertexWeights_, commIds_, commWeights_, newCommIds_, mass_, v0, v1, e0, e1);
-    //update_commids_cuda(commIds_, newCommIds_, commWeights_, vertexWeights_, v0, v1);
+    update_commids_cuda(commIds_, newCommIds_, commWeights_, vertexWeights_, v0, v1);
 }    
 
-void GraphGPU::update_community_ids()
+void GraphGPU::restore_community_ids()
 {
     GraphElem* tmp = newCommIds_;
     newCommIds_ = commIds_;
     commIds_ = tmp;
+
+    update_community_weights_cuda(newCommIds_, commIds_, commWeights_, vertexWeights_, nv_);
 }
 
 void GraphGPU::compute_mass()

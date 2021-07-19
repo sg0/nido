@@ -43,6 +43,6 @@ int main(int argc, char** argv)
     delete louvain;
     delete graph_gpu;
     delete graph;
-   
+    CudaCall(cudaDeviceReset());
     return 0;
 }

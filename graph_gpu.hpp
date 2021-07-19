@@ -39,10 +39,15 @@ class GraphGPU
     thrust::device_ptr<GraphElem> orders_ptr; //= thrust::device_pointer_cast(indexOrders_);
     thrust::device_ptr<GraphElem2> keys_ptr; // = thrust::device_pointer_cast(commIdKeys_);
     less_int2 comp;
-    //#ifdef MULTIPHASE
+
+    #ifdef MULTIPHASE
     //thrust::device_ptr<GraphElem> commIds_ptr; 
     //thrust::device_ptr<GraphElem> vertex_orders_ptr;
-    //#endif
+    void* buffer_;
+    GraphElem* vertexIdsHost_;
+    GraphElem* numEdgesHost_;
+    GraphElem* sortedIndicesHost_;
+    #endif
     GraphElem determine_optimal_edges_per_batch 
     (
         const GraphElem&, 
@@ -63,6 +68,27 @@ class GraphGPU
     void sum_vertex_weights();
     void compute_mass();
 
+    #ifdef MULTIPHASE
+
+    GraphElem sort_vertex_by_community_ids
+    (
+        GraphElem* vertexIds,
+        GraphElem* vertexOffsets,
+        GraphElem* newNv
+    );
+    void shuffle_edge_list
+    (
+        GraphElem* vertexIds,
+        GraphElem* vertexOffsets,
+        GraphElem* numEdges,
+        GraphElem* newNv
+    );
+    void compress_all_edges
+    (
+        GraphElem* numEdges
+    );
+
+    #endif
   public:
     GraphGPU (Graph* graph);
     ~GraphGPU();
@@ -99,5 +125,11 @@ class GraphGPU
     void move_edges_to_host(const GraphElem& v0,  const GraphElem& v1, cudaStream_t stream = 0);
     void move_weights_to_device(const GraphElem& v0, const GraphElem& v1, cudaStream_t stream = 0);
     void move_weights_to_host(const GraphElem& v0, const GraphElem& v1, cudaStream_t stream = 0);
+
+    void update_community_ids();
+
+    #ifdef MULTIPHASE
+    bool aggregation();
+    #endif
 };
 #endif

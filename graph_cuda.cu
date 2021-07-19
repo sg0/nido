@@ -65,7 +65,7 @@ void fill_edges_community_ids_kernel
             commIdKeys[i] = make_longlong2(u, commId);
             #endif
         }
-        //warp.sync();
+        warp.sync();
     } 
 }
 
@@ -83,6 +83,7 @@ void fill_edges_community_ids_cuda
 )
 {
     GraphElem nv = v1-v0;
+    //std::cout << nv << std::endl;
     long long nblocks = (nv+(BLOCKDIM02/TILESIZE01)-1)/(BLOCKDIM02/TILESIZE01);
     nblocks = (nblocks > MAX_GRIDDIM) ? MAX_GRIDDIM : nblocks;
     CudaLaunch((fill_edges_community_ids_kernel<TILESIZE01, BLOCKDIM02><<<nblocks, BLOCKDIM02, 0, stream>>>
@@ -120,7 +121,7 @@ void fill_index_orders_kernel
         GraphElem end   = t_ranges[1]-e_base;
         for(GraphElem i = start+warp_tid; i < end; i += WarpSize)
              indexOrders[i] = i-start;
-        //warp.sync();
+        warp.sync();
     } 
 }
 
@@ -177,11 +178,13 @@ void sum_vertex_weights_kernel
         for(GraphElem e = start+warp_tid; e < end; e += WarpSize)
             w += weights[e];
 
+        //warp.sync();
         for(int i = warp.size()/2; i > 0; i/=2)
             w += warp.shfl_down(w, i);
  
         if(warp_tid == 0) 
             vertex_weights[u] = w;
+        warp.sync();
     }
 }
 
@@ -312,6 +315,7 @@ void max_order_reduce_kernel
     {
         GraphElem tmp = __shfl_down_sync(0xffffffff, max, offset);
         max = (tmp > max) ? tmp : max;
+        //__syncthreads(); 
     }
 
     if(threadIdx.x == 0)
@@ -352,6 +356,7 @@ void max_order_kernel
     {
         GraphElem tmp = __shfl_down_sync(0xffffffff, max, offset);
         max = (tmp > max) ? tmp : max;
+        //__syncthreads();
     }
 
     if(threadIdx.x == 0)
@@ -434,7 +439,7 @@ __global__
 void reorder_edges_by_keys_kernel
 (
     GraphElem* __restrict__ edges,
-    GraphElem* indexOrders,
+    GraphElem* __restrict__ indexOrders,
     GraphElem* __restrict__ indices,
     GraphElem* buff,
     const GraphElem v_base,
@@ -467,7 +472,7 @@ void reorder_edges_by_keys_kernel
         warp.sync();
         for(GraphElem i = start+lane_id; i < end; i += WarpSize)
             edges[i] = buff[i];
-        //warp.sync();
+        warp.sync();
     } 
 }
 
@@ -498,7 +503,7 @@ __global__
 void reorder_weights_by_keys_kernel
 (
     GraphWeight* __restrict__ edgeWeights,
-    GraphElem*   indexOrders,
+    GraphElem*   __restrict__ indexOrders,
     GraphElem*   __restrict__ indices,
     GraphWeight* buff,
     const GraphElem v_base,
@@ -530,6 +535,7 @@ void reorder_weights_by_keys_kernel
         warp.sync();
         for(GraphElem i = start+lane_id; i < end; i += WarpSize)
             edgeWeights[i] = buff[i];
+        warp.sync();
     } 
 }
 //#endif
@@ -608,6 +614,7 @@ void build_local_commid_offsets_kernel
                         break;
                 }
             }
+            ///warp.sync();
             #pragma unroll
             for(int i = WarpSize/2; i > 0; i/=2)
                 localCount += warp.shfl_down(localCount, i);
@@ -618,6 +625,7 @@ void build_local_commid_offsets_kernel
         start = end;
         if(lane_id == 0x00)
             localCommNums[v-v_base] = localId;
+        ///warp.sync();
     }
 }
 
@@ -787,8 +795,9 @@ void louvain_update_kernel
                     }
                 }
             }
+            //tile.sync();
         }
-
+        //warp.sync();
         if(tile_lane_id == 0x00)
             gain_shared[(WarpSize/TileSize)*warp_id+tile_id] = target;
         warp.sync();
@@ -817,6 +826,8 @@ void louvain_update_kernel
             gain -= selfWeight;
             if(gain > 0)
                 newCommIds[v] = localCommNum;
+            else
+                newCommIds[v] = myCommId;
         }
         warp.sync();
         start = end;
@@ -865,6 +876,7 @@ void compute_mass_reduce_kernel
     GraphWeight m = 0.;
     for(GraphElem i = threadIdx.x+WarpSize*blockIdx.x; i < nv; i += WarpSize*gridDim.x)
         m += vertexWeights[i];
+    //__syncthreads();
     for(unsigned int i = WarpSize/2; i > 0; i/=2)
         m += __shfl_down_sync(0xffffffff, m, i, WarpSize);
 
@@ -885,6 +897,8 @@ void reduce_vector_kernel
     GraphWeight m = 0.;
     for(GraphElem i = threadIdx.x; i < nv; i += WarpSize*WarpSize)
         m += mass[i];
+    //__syncthreads();
+
     for(unsigned int i = WarpSize/2; i > 0; i/=2)
         m += __shfl_down_sync(0xffffffff, m, i, WarpSize);
 
@@ -926,12 +940,12 @@ template<const int BlockSize, const int WarpSize>
 __global__
 void compute_modularity_reduce_kernel
 (
-    GraphWeight* __restrict__ mod,
-    GraphElem*   __restrict__ edges,
-    GraphWeight* __restrict__ edgeWeights,
-    GraphElem*   __restrict__ indices,
-    GraphElem*   __restrict__ commIds,
-    GraphWeight* __restrict__ commWeights,
+    GraphWeight*  __restrict__ mod,
+    GraphElem*    __restrict__ edges,
+    GraphWeight*  __restrict__ edgeWeights,
+    GraphElem*    __restrict__ indices,
+    GraphElem*    __restrict__ commIds,
+    GraphWeight*  __restrict__ commWeights,
     GraphElem* localCommOffsets,
     GraphElem* localCommNums,
     const GraphWeight mass,
@@ -993,7 +1007,7 @@ void compute_modularity_reduce_kernel
             selfWeight -= ac*ac/(4*mass*mass);
             mod[warp_id+BlockSize/WarpSize*blockIdx.x] += selfWeight;
         }
-        warp.sync();
+        //warp.sync();
         start = end;
     }
 }
@@ -1048,20 +1062,253 @@ void fill_vertex_index_kernel
     const GraphElem nv
 )
 {
-    for(GraphElem i = threadIdx.x+BlockSize*gridDim.x; i < nv; i += BlockSize*gridDim.x)
+    for(GraphElem i = threadIdx.x+BlockSize*blockIdx.x; i < nv; i += BlockSize*gridDim.x)
         vertex_index[i] = i; 
 }
 
 void fill_vertex_index_cuda
 (
-    const GraphElem* vertex_index,
+    GraphElem* vertex_index,
     const GraphElem& nv,
-    cudaStream_t stream
+    cudaStream_t stream = 0
 )
 {
     long long nblocks = (nv + BLOCKDIM03-1)/BLOCKDIM03;
-    fill_vertex_index_kernel<BLOCKDIM03><<<nblocks, BLOCKDIM03, 0, stream>>>
-    (vertex_index, nv);    
+    nblocks = (nblocks > MAX_GRIDDIM) ? MAX_GRIDDIM : nblocks;
+    CudaLaunch((fill_vertex_index_kernel<BLOCKDIM03><<<nblocks, BLOCKDIM03, 0, stream>>>
+    (vertex_index, nv)));    
+}
+
+template<const int WarpSize>
+__global__
+void build_new_vertex_offset_kernel
+( 
+    GraphElem* __restrict__ vertexOffsets,
+    GraphElem* __restrict__ newNv,
+    GraphElem* __restrict__ commIds, 
+    const GraphElem nv
+)
+{
+    volatile GraphElem target = commIds[0];
+    volatile GraphElem num = 0;
+    volatile GraphElem count = 0;
+    const unsigned warp_id = threadIdx.x & (WarpSize-1);
+    while(count < nv)
+    {
+        volatile GraphElem change = 0;
+        if(warp_id+count < nv)
+        {
+            if(commIds[warp_id+count]==target)
+                change = 1;
+        }
+        for(unsigned i = WarpSize/2; i > 0; i/=2)
+            change += __shfl_down_sync(0xffffffff, change, i, WarpSize);
+
+        change = __shfl_sync(0xffffffff, change, 0);
+        count += change;
+        if(change < WarpSize)
+        {
+            if(warp_id == 0)
+                vertexOffsets[num] = count;
+            num++;
+            if(count < nv)
+                target = commIds[count];
+        }
+        //__syncthreads();
+    } 
+    if(warp_id == 0)
+        *newNv = num;
+}
+
+template<const int BlockSize>
+__global__
+void build_new_commids_kernel
+(
+    GraphElem* __restrict__ commIds,
+    GraphElem* __restrict__ vertexIds,
+    GraphElem* __restrict__ vertexOffsets,
+    GraphElem* __restrict__ nv_
+)
+{
+    __shared__ GraphElem ranges[2];
+    const GraphElem nv = *nv_;
+    GraphElem start, end;    
+    for(GraphElem i = blockIdx.x; i < nv; i += gridDim.x)
+    {
+        if(threadIdx.x == 0)
+        {
+            if(i == 0)
+                ranges[0] = 0;
+            else 
+                ranges[0] = vertexOffsets[i-1];
+            ranges[1] = vertexOffsets[i];
+        } 
+        __syncthreads();
+
+        start = ranges[0];
+        end = ranges[1];
+        for(GraphElem j = start + threadIdx.x; j < end; j += BlockSize)
+        {
+            GraphElem v = vertexIds[j];
+            commIds[v] = i;
+        }
+        __syncthreads();
+    }
+}
+
+GraphElem build_new_vertex_id_cuda
+( 
+    GraphElem* commIds,
+    GraphElem* vertexOffsets,
+    GraphElem* newNv, 
+    GraphElem* vertexIds, 
+    const GraphElem& nv,
+    cudaStream_t stream = 0
+)
+{
+    CudaLaunch((build_new_vertex_offset_kernel<WARPSIZE><<<1, WARPSIZE, 0, stream>>>
+    (vertexOffsets, newNv, commIds, nv))); 
+    CudaLaunch((build_new_commids_kernel<BLOCKDIM01><<<dim3(MAX_GRIDDIM), BLOCKDIM01, 0, stream>>>
+    (commIds, vertexIds, vertexOffsets, newNv)));
+    GraphElem n;
+    CudaMemcpyDtoH(&n, newNv, sizeof(GraphElem));
+    return n;
+}
+
+template<const int BlockSize>
+__global__
+void compress_edges_kernel
+(
+    GraphElem*   __restrict__ edges, 
+    GraphWeight* __restrict__ edgeWeights, 
+    GraphElem*   __restrict__ numEdges, 
+    GraphElem*   __restrict__ indices,
+    GraphElem*   __restrict__ commIds,
+    GraphElem*   localCommOffsets, 
+    GraphElem*   localCommNums, 
+    const GraphElem v_base, 
+    const GraphElem e_base, 
+    const GraphElem nv 
+)
+{
+    for(GraphElem v = threadIdx.x+BlockSize*blockIdx.x; v < nv; v += BlockSize*gridDim.x)
+    {
+        GraphElem num = localCommNums[v];
+        GraphElem start, end;
+        start = indices[v+v_base+0]-e_base;
+        end   = indices[v+v_base+1]-e_base;
+        for(GraphElem i = 0; i < num; ++i)
+        {
+            GraphElem n0 = localCommOffsets[start+i]+start;
+            GraphElem n1 = ((i == num-1) ? end : localCommOffsets[start+i+1]+start);
+            GraphElem myId = commIds[edges[n0]];
+            GraphWeight w = 0;
+            for(GraphElem j = n0; j < n1; ++j)
+                w += edgeWeights[j];
+            edges[i+start] = myId;
+            edgeWeights[i+start] = w;        
+        }
+        numEdges[v+v_base] = num;
+    }
+}
+
+void compress_edges_cuda
+(
+    GraphElem*   edges, 
+    GraphWeight* edgeWeights, 
+    GraphElem*   numEdges, 
+    GraphElem*   indices,
+    GraphElem*   commIds,
+    GraphElem*   localCommOffsets, 
+    GraphElem*   localCommNums, 
+    const GraphElem& v0, 
+    const GraphElem& v1, 
+    const GraphElem& e0, 
+    const GraphElem& e1,
+    cudaStream_t stream = 0
+)
+{
+    GraphElem nv = v1-v0;
+    long long nblocks = (nv+BLOCKDIM02-1)/BLOCKDIM02;
+    nblocks = (nblocks > MAX_GRIDDIM) ? MAX_GRIDDIM : nblocks;
+    CudaLaunch((compress_edges_kernel<BLOCKDIM02><<<nblocks, BLOCKDIM02, 0, stream>>>
+    (edges, edgeWeights, numEdges, indices, commIds, localCommOffsets, localCommNums, v0, e0, nv)));
+}
+
+template<typename T, const int BlockSize>
+__global__
+void sort_vector_kernel
+(
+    T* __restrict__ dest,
+    T* __restrict__ src,
+    GraphElem* __restrict__ orders,
+    const GraphElem nv
+)
+{
+    for(GraphElem i = threadIdx.x+BlockSize*blockIdx.x; i < nv; i += BlockSize*gridDim.x)
+        dest[i] = src[orders[i]];
+}
+
+
+template<typename T>
+void sort_vector_cuda
+(
+    T* dest, 
+    T* src,
+    GraphElem* orders,
+    const GraphElem& nv,
+    cudaStream_t stream = 0
+)
+{
+    long long nblocks = (nv+BLOCKDIM03-1)/BLOCKDIM03;
+    nblocks = (nblocks > MAX_GRIDDIM) ? MAX_GRIDDIM : nblocks;
+    CudaLaunch((sort_vector_kernel<T, BLOCKDIM03><<<nblocks, BLOCKDIM03, 0, stream>>>
+    (dest, src, orders, nv)));
+}
+
+template
+void sort_vector_cuda<GraphElem>
+(
+    GraphElem* src,
+    GraphElem* dest,
+    GraphElem* orders,
+    const GraphElem& nv,
+    cudaStream_t stream
+);
+
+template<const int BlockSize>
+__global__
+void compress_edge_ranges_kernel
+(
+    GraphElem* __restrict__ buffer,
+    GraphElem* __restrict__ indices, 
+    GraphElem* __restrict__ vertexOffsets, 
+    const GraphElem nv
+)
+{
+    for(GraphElem i = threadIdx.x+BlockSize*blockIdx.x; i < nv; i += BlockSize*gridDim.x)
+    {
+        //GraphElem offset = vertexOffsets[i];
+        buffer[i] = indices[vertexOffsets[i]];
+    }
+}
+
+void compress_edge_ranges_cuda
+(
+    GraphElem* indices,
+    GraphElem*  buffer, 
+    GraphElem* vertexOffsets, 
+    const GraphElem& nv,
+    cudaStream_t stream = 0
+)
+{
+    long long nblocks = (nv+BLOCKDIM02-1)/BLOCKDIM02;
+    nblocks = (nblocks > MAX_GRIDDIM) ? MAX_GRIDDIM : nblocks;
+
+    CudaLaunch((compress_edge_ranges_kernel<BLOCKDIM02><<<nblocks, BLOCKDIM02, 0, stream>>>
+    (buffer, indices, vertexOffsets, nv)));
+
+    CudaLaunch((copy_vector_kernel<GraphElem, BLOCKDIM02><<<nblocks, BLOCKDIM02, 0, stream>>>(indices+1, buffer, nv)));
 }
 #endif
 

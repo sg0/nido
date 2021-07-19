@@ -209,6 +209,69 @@ GraphWeight compute_modularity_cuda
     cudaStream_t stream = 0
 );
 
+#ifdef MULTIPHASE
+void fill_vertex_index_cuda
+(
+    GraphElem* vertex_index,
+    const GraphElem& nv,
+    cudaStream_t stream = 0
+);
+
+GraphElem build_new_vertex_id_cuda
+( 
+    GraphElem* commIds,
+    GraphElem* vertexOffsets,
+    GraphElem* newNv, 
+    GraphElem* vertexIds, 
+    const GraphElem& nv,
+    cudaStream_t stream = 0
+);
+
+void compress_edges_cuda
+(
+    GraphElem*   edges, 
+    GraphWeight* edgeWeights, 
+    GraphElem*   numEdges, 
+    GraphElem*   indices,
+    GraphElem*   commIds, 
+    GraphElem*   localCommOffsets, 
+    GraphElem*   localCommNums, 
+    const GraphElem& v0, 
+    const GraphElem& v1, 
+    const GraphElem& e0, 
+    const GraphElem& e1,
+    cudaStream_t stream = 0
+);
+/*
+void compress_edge_ranges_cuda
+(
+    GraphElem* indices, 
+    GraphElem* vertexOffsets, 
+    const GraphElem& nv,
+    cudaStream_t stream = 0
+);
+*/
+void compress_edge_ranges_cuda
+(
+    GraphElem* indices,
+    GraphElem*  buffer,
+    GraphElem* vertexOffsets,
+    const GraphElem& nv,
+    cudaStream_t stream = 0
+);
+
+template<typename T>
+void sort_vector_cuda
+(
+    T* dest,
+    T* src,
+    GraphElem* orders,
+    const GraphElem& nv,
+    cudaStream_t stream = 0
+);
+#endif
+
+//functions not used in the Louvain algorithm
 void scan_edge_weights_cuda
 (
     GraphWeight* edgeWeights, 

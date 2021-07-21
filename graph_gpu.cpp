@@ -193,7 +193,7 @@ void GraphGPU::sort_edges_by_community_ids
 
     //CudaDeviceSynchronize();
     
-    thrust::sort_by_key(keys_ptr, keys_ptr+ne, orders_ptr, comp);
+    thrust::stable_sort_by_key(keys_ptr, keys_ptr+ne, orders_ptr, comp);
 
     //CudaDeviceSynchronize();
 
@@ -472,7 +472,7 @@ void GraphGPU::compress_all_edges
 
         //CudaDeviceSynchronize();
 
-        thrust::sort_by_key(keys_ptr, keys_ptr+ne, orders_ptr, comp);
+        thrust::stable_sort_by_key(keys_ptr, keys_ptr+ne, orders_ptr, comp);
 
         //CudaDeviceSynchronize();
 
@@ -519,7 +519,7 @@ GraphElem GraphGPU::sort_vertex_by_community_ids
 
     //CudaDeviceSynchronize();
 
-    thrust::sort_by_key(commIds_ptr, commIds_ptr+nv_, vertexIds_ptr, thrust::less<GraphElem>());
+    thrust::stable_sort_by_key(commIds_ptr, commIds_ptr+nv_, vertexIds_ptr, thrust::less<GraphElem>());
 
     //CudaDeviceSynchronize();
 

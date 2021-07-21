@@ -644,10 +644,10 @@ void build_local_commid_offsets_cuda
 )
 {
     GraphElem nv = v1-v0;
-    long long nblocks = (nv+(BLOCKDIM03/4-1))/(BLOCKDIM03/4);
+    long long nblocks = (nv+(BLOCKDIM03/16-1))/(BLOCKDIM03/16);
     nblocks = (nblocks > MAX_GRIDDIM) ? MAX_GRIDDIM : nblocks;
 
-    CudaLaunch((build_local_commid_offsets_kernel<BLOCKDIM03,4><<<nblocks, BLOCKDIM03, 0, stream>>>
+    CudaLaunch((build_local_commid_offsets_kernel<BLOCKDIM03,16><<<nblocks, BLOCKDIM03, 0, stream>>>
     (localOffsets,localCommNums, edges, indices, commIds, v0, e0, nv)));
 }
 

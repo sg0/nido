@@ -1,4 +1,5 @@
 #include <omp.h>
+#include <cstdio>
 #include "clustering.hpp"
 void Clustering::singleton_partition()
 {
@@ -17,3 +18,14 @@ void Clustering::update_clustering()
     }
 }
 
+void Clustering::dump_partition(const std::string& filename)
+{
+    FILE* pFile;
+    pFile = fopen(filename.c_str(), "wt");
+    if(pFile != nullptr)
+    {
+        for(GraphElem i = 0; i < nv_; ++i)
+            fprintf(pFile, "%lld\n", (long long)commIds_[i]);
+    }
+    fclose(pFile);
+}

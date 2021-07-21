@@ -39,6 +39,7 @@ int main(int argc, char** argv)
     LouvainGPU* louvain = new LouvainGPU(maxLoops, tau, nbatches);
 
     louvain->run(graph_gpu);
+    //louvain->dump_partition(std::string(argv[pos+4]));
 
     delete louvain;
     delete graph_gpu;

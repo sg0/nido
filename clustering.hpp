@@ -1,5 +1,6 @@
 #ifndef CLUSTERING_HPP
 #define CLUSTERING_HPP
+#include <string>
 #include "cuda_wrapper.hpp"
 #include "types.hpp"
 
@@ -33,6 +34,8 @@ class Clustering
     {
         CudaMemcpyAsyncDtoH(commIdsHost_, commIds, sizeof(GraphElem)*nv, stream);
     }
+
     void update_clustering();
+    void dump_partition(const std::string&);
 };
 #endif

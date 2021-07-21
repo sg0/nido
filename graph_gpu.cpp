@@ -24,6 +24,7 @@ edgeWeightsHost_(nullptr)
 , buffer_(nullptr), vertexIdsHost_(nullptr), 
 numEdgesHost_(nullptr), sortedIndicesHost_(nullptr)
 #endif
+,e0_(0), e1_(0), w0_(0), w1_(0)
 {
     nv_ = graph_->get_num_vertices();
     ne_ = graph_->get_num_edges();
@@ -226,7 +227,8 @@ void GraphGPU::sum_vertex_weights()
         GraphElem e0 = indicesHost_[v0];
         GraphElem e1 = indicesHost_[v1];
 
-        CudaMemcpyAsyncHtoD(edgeWeights_, edgeWeightsHost_+e0, sizeof(GraphWeight)*(e1-e0), 0);
+        //CudaMemcpyAsyncHtoD(edgeWeights_, edgeWeightsHost_+e0, sizeof(GraphWeight)*(e1-e0), 0);
+        move_weights_to_device(e0, e1);
         sum_vertex_weights_cuda(vertexWeights_, edgeWeights_, indices_, v0, v1, e0, e1);
     }
 }
@@ -277,9 +279,11 @@ GraphWeight GraphGPU::compute_modularity()
         GraphElem e1 = indicesHost_[v1];
         GraphElem ne = e1-e0;
 
-        CudaMemcpyAsyncHtoD(edges_, edgesHost_+e0, sizeof(GraphElem)*ne, cuStreams[1]);
+        //CudaMemcpyAsyncHtoD(edges_, edgesHost_+e0, sizeof(GraphElem)*ne, cuStreams[1]);
+        move_edges_to_device(e0, e1, cuStreams[1]);
 
-        CudaMemcpyAsyncHtoD(edgeWeights_, edgeWeightsHost_+e0, sizeof(GraphWeight)*ne, cuStreams[2]);
+        //CudaMemcpyAsyncHtoD(edgeWeights_, edgeWeightsHost_+e0, sizeof(GraphWeight)*ne, cuStreams[2]);
+        move_weights_to_device(e0, e1, cuStreams[2]);
 
         //CudaDeviceSynchronize();
 
@@ -303,8 +307,12 @@ void GraphGPU::move_edges_to_device
     cudaStream_t stream
 )
 {
-    GraphElem ne = e1-e0;
-    CudaMemcpyAsyncHtoD(edges_, edgesHost_+e0, sizeof(GraphElem)*ne, stream);
+    if(e0 != e0_ or e1 != e1_)
+    {
+        GraphElem ne = e1-e0;
+        e0_ = e0; e1_ = e1;
+        CudaMemcpyAsyncHtoD(edges_, edgesHost_+e0, sizeof(GraphElem)*ne, stream);
+    }
 }
 
 void GraphGPU::move_edges_to_host
@@ -325,8 +333,12 @@ void GraphGPU::move_weights_to_device
     cudaStream_t stream
 )
 {
-    GraphElem ne = e1-e0;
-    CudaMemcpyAsyncHtoD(edgeWeights_, edgeWeightsHost_+e0, sizeof(GraphWeight)*ne, stream);
+    if(e0 != w0_ or e1 != w1_)
+    {
+        GraphElem ne = e1-e0;
+        w0_ = e0; w1_ = e1;
+        CudaMemcpyAsyncHtoD(edgeWeights_, edgeWeightsHost_+e0, sizeof(GraphWeight)*ne, stream);
+    }
 }
 
 void GraphGPU::move_weights_to_host
@@ -448,9 +460,11 @@ void GraphGPU::compress_all_edges
         }
         #endif*/
 
-        CudaMemcpyAsyncHtoD(edges_, edgesHost_+e0, sizeof(GraphElem)*ne, cuStreams[0]);
+        //CudaMemcpyAsyncHtoD(edges_, edgesHost_+e0, sizeof(GraphElem)*ne, cuStreams[0]);
+        move_edges_to_device(e0, e1,  cuStreams[0]);
 
-        CudaMemcpyAsyncHtoD(edgeWeights_, edgeWeightsHost_+e0, sizeof(GraphWeight)*ne, cuStreams[1]);
+        //CudaMemcpyAsyncHtoD(edgeWeights_, edgeWeightsHost_+e0, sizeof(GraphWeight)*ne, cuStreams[1]);
+        move_weights_to_device(e0, e1, cuStreams[1]);
 
         fill_index_orders_cuda(indexOrders_, indices_, v0, v1, e0, e1, cuStreams[2]);
 
@@ -550,7 +564,8 @@ bool GraphGPU::aggregation()
     //CudaDeviceSynchronize();
     //third step, update the community information
     //update_communities(vertexIds, vertexOffsets);
-
+    e0_ = 0; e1_ = 0;
+    w0_ = 0; w1_ = 0;
     CudaMemset(vertexWeights_, 0, sizeof(GraphWeight)*nv_);
     CudaMemset(commWeights_, 0, sizeof(GraphWeight)*nv_);
 
@@ -573,5 +588,10 @@ bool GraphGPU::aggregation()
     CudaFree(newNv);
 
     return false;
+}
+
+void GraphGPU::dump_partition(const std::string& filename)
+{
+    clusters_->dump_partition(filename);
 }
 #endif

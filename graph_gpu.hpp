@@ -1,5 +1,6 @@
 #ifndef GRAPH_GPU_HPP_
 #define GRAPH_GPU_HPP_
+#include <cstring>
 #include <vector>
 #include <thrust/device_ptr.h>
 #include "types.hpp"
@@ -94,6 +95,9 @@ class GraphGPU
     Clustering* clusters_;
 
     #endif
+
+    GraphElem e0_, e1_;
+    GraphElem w0_, w1_;
   public:
     GraphGPU (Graph* graph);
     ~GraphGPU();
@@ -135,6 +139,7 @@ class GraphGPU
 
     #ifdef MULTIPHASE
     bool aggregation();
+    void dump_partition(const std::string&);
     #endif
 };
 #endif

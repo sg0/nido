@@ -9,48 +9,50 @@
 #ifdef MULTIPHASE
 #include "clustering.hpp"
 #endif
+
+template<const int NGPU>
 class GraphGPU
 {
   private:
 
     Graph* graph_;
 
-    GraphElem nv_, ne_, ne_per_partition_;
+    GraphElem nv_[NGPU], ne_[NGPU], ne_per_partition_[NGPU];
 
-    GraphElem   *edges_;
-    GraphWeight *edgeWeights_;
+    GraphElem   *edges_[NGPU];
+    GraphWeight *edgeWeights_[NGPU];
 
-    GraphElem2 *commIdKeys_;
-    GraphElem* indexOrders_; 
+    GraphElem2 *commIdKeys_[NGPU];
+    GraphElem* indexOrders_[NGPU]; 
 
-    GraphElem* indices_;
-    GraphWeight* vertexWeights_; 
-    GraphElem* commIds_;
-    GraphWeight* commWeights_;
-    GraphElem* newCommIds_;
-    GraphElem maxOrder_;
-    GraphWeight mass_;
+    GraphElem* indices_[NGPU];
+    GraphWeight* vertexWeights_[NGPU]; 
+    GraphElem* commIds_[NGPU];
+    GraphWeight* commWeights_[NGPU];
+    GraphElem* newCommIds_[NGPU];
+    GraphElem maxOrder_[NGPU];
+    GraphWeight mass_[NGPU];
 
-    GraphElem* indicesHost_;
-    GraphElem* edgesHost_;
-    GraphWeight* edgeWeightsHost_;
+    GraphElem* indicesHost_[NGPU];
+    GraphElem* edgesHost_[NGPU];
+    GraphWeight* edgeWeightsHost_[NGPU];
  
-    std::vector<GraphElem> vertex_partition_;
+    std::vector<GraphElem> vertex_partition_[NGPU];
 
-    cudaStream_t cuStreams[4];
+    cudaStream_t cuStreams[4][NGPU];
 
     //related to sorting
-    thrust::device_ptr<GraphElem> orders_ptr; //= thrust::device_pointer_cast(indexOrders_);
-    thrust::device_ptr<GraphElem2> keys_ptr; // = thrust::device_pointer_cast(commIdKeys_);
+    thrust::device_ptr<GraphElem> orders_ptr[NGPU]; //= thrust::device_pointer_cast(indexOrders_);
+    thrust::device_ptr<GraphElem2> keys_ptr[NGPU]; // = thrust::device_pointer_cast(commIdKeys_);
     less_int2 comp;
 
     #ifdef MULTIPHASE
     //thrust::device_ptr<GraphElem> commIds_ptr; 
     //thrust::device_ptr<GraphElem> vertex_orders_ptr;
     void* buffer_;
-    GraphElem* vertexIdsHost_;
-    GraphElem* numEdgesHost_;
-    GraphElem* sortedIndicesHost_;
+    GraphElem* vertexIdsHost_[NGPU];
+    GraphElem* numEdgesHost_[NGPU];
+    GraphElem* sortedIndicesHost_[NGPU];
     #endif
     GraphElem determine_optimal_edges_per_batch 
     (
@@ -96,8 +98,11 @@ class GraphGPU
 
     #endif
 
-    GraphElem e0_, e1_;
-    GraphElem w0_, w1_;
+    GraphElem e0_[NGPU], e1_[NGPU];
+    GraphElem w0_[NGPU], w1_[NGPU];
+
+    GraphElem v_base_[NGPU]; v_end_[NGPU];
+    GraphElem e_base_[NGPU]; e_end_[NGPU];
   public:
     GraphGPU (Graph* graph);
     ~GraphGPU();

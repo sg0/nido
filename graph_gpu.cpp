@@ -13,31 +13,39 @@
 #include "graph_cpu.hpp"
 #endif
 
-GraphGPU::GraphGPU(Graph* graph) : graph_(graph), 
-nv_(0), ne_(0), ne_per_partition_(0), edges_(nullptr),
-edgeWeights_(nullptr), commIdKeys_(nullptr),
-indexOrders_(nullptr), indices_(nullptr), vertexWeights_(nullptr),
-commIds_(nullptr), commWeights_(nullptr), newCommIds_(nullptr), 
-maxOrder_(0), mass_(0), indicesHost_(nullptr), edgesHost_(nullptr),
-edgeWeightsHost_(nullptr)
-#ifdef MULTIPHASE
-, buffer_(nullptr), vertexIdsHost_(nullptr), 
-numEdgesHost_(nullptr), sortedIndicesHost_(nullptr)
-#endif
-,e0_(0), e1_(0), w0_(0), w1_(0)
+GraphGPU::GraphGPU(Graph* graph) : graph_(graph) 
 {
-    nv_ = graph_->get_num_vertices();
-    ne_ = graph_->get_num_edges();
+    GraphElem NV = graph_->get_num_vertices();
+    GraphElem NE = graph_->get_num_edges();
 
-    for(unsigned i = 0; i < 4; ++i)
-        CudaCall(cudaStreamCreate(&cuStreams[i]));
+    GraphElem nv_per_device = NV/NGPU;
 
-    //alloc buffer
-    CudaMalloc(indices_,       sizeof(GraphElem)*(nv_+1));
-    CudaMalloc(vertexWeights_, sizeof(GraphWeight)*nv_);
-    CudaMalloc(commIds_,       sizeof(GraphElem)*nv_);
-    CudaMalloc(commWeights_,   sizeof(GraphWeight)*nv_);
-    CudaMalloc(newCommIds_,    sizeof(GraphElem)*nv_);
+    indicesHost_     = graph_->get_index_ranges();
+    edgeWeightsHost_ = graph_->get_edge_weights();
+    edgesHost_       = graph_->get_edges();
+   
+    for(int id = 0; id < NGPU; ++id)
+    {
+        CudaCall(cudaSetDevice(id));
+
+        for(unsigned i = 0; i < 4; ++i)
+            CudaCall(cudaStreamCreate(&cuStreams[id][i]));
+
+        e0_[id] = 0; e1_[id] = 0;
+        v0_[id] = 0; v1_[id] = 0;
+
+        v_base_[id] = nv_per_device*id;
+        v_end_[id] = v_base_[id]+nv_per_device;
+        if(v_dend_[id] > NV) v_end_[id] = NV;
+        e_base_[id] = indicesHost_[v_base_[id]];
+        e_end_[id]  = indicesHost_[v_end_[id]];
+
+        //alloc buffer
+        CudaMalloc(indices_[dev],      sizeof(GraphElem)*(nv_+1));
+        CudaMalloc(vertexWeights_[dev],sizeof(GraphWeight)*nv_);
+        CudaMalloc(commIds_[dev],      sizeof(GraphElem)*nv_);
+        CudaMalloc(commWeights_[dev],  sizeof(GraphWeight)*nv_);
+        CudaMalloc(newCommIds_[dev],   sizeof(GraphElem)*nv_);
 
     indicesHost_     = graph_->get_index_ranges();
     edgeWeightsHost_ = graph_->get_edge_weights(); 
@@ -72,6 +80,7 @@ numEdgesHost_(nullptr), sortedIndicesHost_(nullptr)
     #endif
     sum_vertex_weights();
     compute_mass();
+    }
     //std::cout << "nv is " << nv_ << std::endl;
 }
 

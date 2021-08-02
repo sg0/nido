@@ -8,12 +8,12 @@ void Clustering::singleton_partition()
         commIds_[i] = i;
 }
 
-void Clustering::update_clustering()
+void Clustering::update_clustering(GraphElem* commIdsHost)
 {
     #pragma omp parallel for
     for(GraphElem i = 0; i < nv_; ++i)
     {
-        GraphElem myId = commIdsHost_[commIds_[i]];
+        GraphElem myId = commIdsHost_[commIds[i]];
         commIds_[i] = myId;
     }
 }

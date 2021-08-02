@@ -27,14 +27,14 @@ int main(int argc, char** argv)
         pos = 3;
     }
 
-    int dev_id = atoi(argv[pos]);
-    CudaCall(cudaSetDevice(dev_id));
-
     Int maxLoops = (Int)atoll(argv[pos+1]);
     Float tau = (Float)atof(argv[pos+2]);
     Int nbatches = (Int)atoll(argv[pos+3]);
     GraphGPU* graph_gpu = new GraphGPU(graph);
     
+    omp_set_num_threads(NGPU);
+    //omp_set_dynamic(0);
+
     //Partition* partition = new Partition(graph);
     LouvainGPU* louvain = new LouvainGPU(maxLoops, tau, nbatches);
 
@@ -44,6 +44,10 @@ int main(int argc, char** argv)
     delete louvain;
     delete graph_gpu;
     delete graph;
-    CudaCall(cudaDeviceReset());
+    for(int i = 0; i < NGPU; ++i)
+    {
+        CudaCall(cudaSetDevice(i));
+        CudaCall(cudaDeviceReset());
+    }
     return 0;
 }

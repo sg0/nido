@@ -10,21 +10,22 @@ class Clustering
 
     GraphElem nv_;
     GraphElem* commIds_;
-    GraphElem* commIdsHost_;
+    //GraphElem* commIdsHost_;
     void singleton_partition();
 
   public:
     Clustering(const GraphElem& nv) : nv_(nv)
     {
         commIds_ = new GraphElem [nv_];
-        CudaMallocHost(commIdsHost_, sizeof(GraphElem)*nv_);
+        //CudaMallocHost(commIdsHost_, sizeof(GraphElem)*nv_);
         singleton_partition();
     }
     ~Clustering()
     {
         delete [] commIds_;
-        CudaFreeHost(commIdsHost_);
+        //CudaFreeHost(commIdsHost_);
     }
+    /*
     void move_community_to_host
     (
         GraphElem* commIds, 
@@ -33,9 +34,9 @@ class Clustering
     )
     {
         CudaMemcpyAsyncDtoH(commIdsHost_, commIds, sizeof(GraphElem)*nv, stream);
-    }
+    }*/
 
-    void update_clustering();
+    void update_clustering(GraphElem* commIdsHost_);
     void dump_partition(const std::string&);
 };
 #endif

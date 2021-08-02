@@ -13,28 +13,18 @@ void reorder_weights_by_keys_cuda
     cudaStream_t stream = 0
 );
 
-void reorder_edges_by_keys_cuda
-(
-    GraphElem* edges, 
-    GraphElem* indexOrders, 
-    GraphElem* indices, 
-    const GraphElem& v0, 
-    const GraphElem& v1,
-    const GraphElem& e0,
-    const GraphElem& e1,
-    cudaStream_t stream = 0
-);
-
 void fill_edges_community_ids_cuda
 (
     GraphElem2* commIdKeys, 
-    GraphElem* edges,
-    GraphElem* indices,
-    GraphElem* commIds,
+    GraphElem*  edges,
+    GraphElem*  indices,
+    GraphElem** commIdsPtr,
     const GraphElem& v0,
     const GraphElem& v1,
     const GraphElem& e0,
     const GraphElem& e1,
+    const GraphElem& V0,
+    const GraphElem& nv_per_device,
     cudaStream_t stream = 0
 );
 
@@ -46,6 +36,7 @@ void fill_index_orders_cuda
     const GraphElem& v1,
     const GraphElem& e0,
     const GraphElem& e1,
+    const GraphElem& V0,
     cudaStream_t stream = 0
 );
 
@@ -58,15 +49,17 @@ void sum_vertex_weights_cuda
     const GraphElem& v1,
     const GraphElem& e0,
     const GraphElem& e1,
+    const GraphElem& V0,
     cudaStream_t stream = 0
 );
 
 void compute_community_weights_cuda
 (
-    GraphWeight* commWeights,
+    GraphWeight** commWeights,
     GraphElem* commIds, 
     GraphWeight* vertexWeights,
     const GraphElem& nv,
+    const GraphElem& nv_per_device,
     cudaStream_t stream = 0
 );
 
@@ -76,7 +69,8 @@ void singleton_partition_cuda
     GraphElem* newCommIds, 
     GraphWeight* commWeights, 
     GraphWeight* vertexWeights, 
-    const GraphElem& nv, 
+    const GraphElem& nv,
+    const GraphElem& V0,  
     cudaStream_t stream = 0
 );
 
@@ -86,7 +80,7 @@ GraphElem max_order_cuda
     const GraphElem& nv,
     cudaStream_t stream = 0
 );
-
+/*
 void move_index_orders_cuda
 (
     GraphElem* dest,
@@ -97,7 +91,7 @@ void move_index_orders_cuda
     const GraphElem& e1,
     cudaStream_t stream = 0
 );
-
+*/
 void reorder_edges_by_keys_cuda
 (
     GraphElem* edges, 
@@ -108,6 +102,7 @@ void reorder_edges_by_keys_cuda
     const GraphElem& v1,  
     const GraphElem& e0, 
     const GraphElem& e1,
+    const GraphElem& V0,
     cudaStream_t stream = 0 
 );
 
@@ -121,42 +116,48 @@ void reorder_weights_by_keys_cuda
     const GraphElem& v1,  
     const GraphElem& e0, 
     const GraphElem& e1,
+    const GraphElem& V0, 
     cudaStream_t stream = 0
 );
 
 void build_local_commid_offsets_cuda
 (
-    GraphElem* localOffsets,
-    GraphElem* localCommNums,
-    GraphElem* edges,
-    GraphElem* indices,
-    GraphElem* commIds,
+    GraphElem*  localOffsets,
+    GraphElem*  localCommNums,
+    GraphElem*  edges,
+    GraphElem*  indices,
+    GraphElem** commIdsPtr,
     const GraphElem& v0,
     const GraphElem& v1,
     const GraphElem& e0,
     const GraphElem& e1,
+    const GraphElem& V0,
+    const GraphElem& nv_per_device,
     cudaStream_t stream = 0
 );
 
 void louvain_update_cuda
 (
-    GraphElem* localCommOffsets,
-    GraphElem* localCommNums,
-    GraphElem*   edges,
-    GraphWeight* edgeWeights,
-    GraphElem*   indices,
-    GraphWeight* vertexWeights,
-    GraphElem*   commIds,
-    GraphWeight* commWeights,
-    GraphElem*   newCommIds,
+    GraphElem*    localCommOffsets,
+    GraphElem*    localCommNums,
+    GraphElem*    edges,
+    GraphWeight*  edgeWeights,
+    GraphElem*    indices,
+    GraphWeight*  vertexWeights,
+    GraphElem*    commIds,
+    GraphElem**   commIdsPtr,
+    GraphWeight** commWeightsPtr,
+    GraphElem*    newCommIds,
     const GraphWeight& mass,
     const GraphElem& v0,
     const GraphElem& v1,
     const GraphElem& e0,
     const GraphElem& e1,
+    const GraphElem& V0,
+    const GraphElem& nv_per_device,
     cudaStream_t stream = 0
 );
-
+/*
 void update_commids_cuda
 (
     GraphElem* commIds,
@@ -167,13 +168,23 @@ void update_commids_cuda
     const GraphElem& v1,
     cudaStream_t stream = 0
 );
-
+*/
 void update_community_weights_cuda
 (
+    GraphWeight** commWeightsPtr,
     GraphElem* commIds,
     GraphElem* newCommIds,
-    GraphWeight* commWeights,
     GraphWeight* vertexWeights,
+    const GraphElem& nv,
+     const GraphElem& nv_per_device,
+    cudaStream_t stream = 0
+);
+
+template<typename T>
+void exchange_vector_cuda
+(
+    T* dest,
+    T* src,
     const GraphElem& nv,
     cudaStream_t stream = 0
 );
@@ -196,19 +207,23 @@ void copy_vector_cuda
 template<const int BlockSize, const int WarpSize>
 void compute_modularity_reduce_cuda
 (
-    GraphWeight* mod,
-    GraphElem* edges,
-    GraphWeight* edgeWeights,
-    GraphElem* indices,
-    GraphElem* commIds,
-    GraphWeight* commWeights,
-    GraphElem* localCommOffsets,
-    GraphElem* localCommNums, 
+    GraphWeight*  mod,
+    GraphElem*    edges,
+    GraphWeight*  edgeWeights,
+    GraphElem*    indices,
+    GraphElem*    commIds,
+    GraphElem**   commIdsPtr,
+    GraphWeight*  commWeights,
+    GraphWeight** commWeightsPtr,
+    GraphElem*    localCommOffsets,
+    GraphElem*    localCommNums, 
     const GraphWeight& mass,
     const GraphElem& v0,
     const GraphElem& v1,
     const GraphElem& e0,
     const GraphElem& e1,
+    const GraphElem& V0,
+    const GraphElem& nv_per_device,
     cudaStream_t stream = 0
 );
 
@@ -224,9 +239,10 @@ void fill_vertex_index_cuda
 (
     GraphElem* vertex_index,
     const GraphElem& nv,
+    const GraphElem& V0,
     cudaStream_t stream = 0
 );
-
+/*
 GraphElem build_new_vertex_id_cuda
 ( 
     GraphElem* commIds,
@@ -251,7 +267,7 @@ void compress_edges_cuda
     const GraphElem& e0, 
     const GraphElem& e1,
     cudaStream_t stream = 0
-);
+);*/
 /*
 void compress_edge_ranges_cuda
 (
@@ -261,6 +277,7 @@ void compress_edge_ranges_cuda
     cudaStream_t stream = 0
 );
 */
+/*
 void compress_edge_ranges_cuda
 (
     GraphElem* indices,
@@ -278,7 +295,7 @@ void sort_vector_cuda
     GraphElem* orders,
     const GraphElem& nv,
     cudaStream_t stream = 0
-);
+);*/
 #endif
 
 //functions not used in the Louvain algorithm

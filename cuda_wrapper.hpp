@@ -86,6 +86,11 @@ CudaCall(cudaDeviceSynchronize())
     CudaCall(cudaHostUnregister(ptr));\
 } 
 
+#define CudaSetDevice(id) \
+{\
+    CudaCall(cudaSetDevice(id));\
+}
+
 //define some cuda kernel configuration
 #define TILESIZE01	32
 #define TILESIZE02	16

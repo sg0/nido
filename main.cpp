@@ -20,12 +20,12 @@ int main(int argc, char** argv)
         nv = atoi(argv[2]);
         Int m0 = atoi(argv[3]);
         graph = new Graph(nv, m0);
-        pos = 4;
+        pos = 3;
     }
     else if(std::string(argv[1]) == "-f")
     {
         graph = new Graph(std::string(argv[2]));
-        pos = 3;
+        pos = 2;
     }
 
     Int maxLoops = (Int)atoll(argv[pos+1]);
@@ -33,7 +33,7 @@ int main(int argc, char** argv)
     Int nbatches = (Int)atoll(argv[pos+3]);
     GraphGPU* graph_gpu = new GraphGPU(graph);
     
-    omp_set_num_threads(NGPU);
+    //omp_set_num_threads(NGPU);
     //omp_set_dynamic(0);
 
     //Partition* partition = new Partition(graph);

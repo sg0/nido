@@ -3,6 +3,7 @@
 #include "clustering.hpp"
 void Clustering::singleton_partition()
 {
+    omp_set_num_threads(omp_get_max_threads());
     #pragma omp parallel for
     for(GraphElem i = 0; i < nv_; ++i)
         commIds_[i] = i;
@@ -10,6 +11,7 @@ void Clustering::singleton_partition()
 
 void Clustering::update_clustering(GraphElem* commIdsHost)
 {
+    omp_set_num_threads(omp_get_max_threads()); 
     #pragma omp parallel for
     for(GraphElem i = 0; i < nv_; ++i)
     {

@@ -392,7 +392,6 @@ weights_(nullptr)
     //GraphElem tid_blk_sz = omp_get_num_threads() / n_blocks;
     GraphElem NV_blk_sz = (totalVertices_+n_blocks-1) / n_blocks;
     GraphElem tid_blk_sz = omp_get_num_threads() / n_blocks;
-    
     #pragma omp parallel
     {
         for (int b=0; b<n_blocks; b++) 

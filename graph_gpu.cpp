@@ -32,10 +32,11 @@ mass_(0), maxPartitions_(0)
     edgeWeightsHost_ = graph_->get_edge_weights();
     edgesHost_       = graph_->get_edges();
 
+    omp_set_num_threads(NGPU);
     #pragma omp parallel
     {
         int id =  omp_get_thread_num() % NGPU;   
-        CudaCall(cudaSetDevice(id));
+        CudaSetDevice(id);
 
         for(unsigned i = 0; i < 4; ++i)
             CudaCall(cudaStreamCreate(&cuStreams[id][i]));
@@ -58,6 +59,7 @@ mass_(0), maxPartitions_(0)
         GraphElem nv = nv_[id];
         GraphElem ne = ne_[id];
 
+        std::cout << id << " " << nv << " " << ne << std::endl; 
         //alloc buffer
         CudaMalloc(indices_[id],       sizeof(GraphElem)   *(nv+1));
         CudaMalloc(vertexWeights_[id], sizeof(GraphWeight) *nv);
@@ -99,10 +101,6 @@ mass_(0), maxPartitions_(0)
     vertexIdsHost_ = new GraphElem [NV_];
     vertexIdsOffsetHost_ = new GraphElem [NV_];
     sortedVertexIdsHost_ = (GraphElem*)malloc(sizeof(GraphElem2)*(NV_+1));
-    
-    //CudaMallocHost(vertexIdsHost_, sizeof(GraphElem)*NV_);
-    //CudaMallocHost(numEdgesHost_,  sizeof(GraphElem)*NV_);
-    //CudaMallocHost(sortedIndicesHost_, sizeof(GraphElem)*(NV_+1));
 
     clusters_ = new Clustering(NV_);
     #endif
@@ -291,6 +289,7 @@ void GraphGPU::sort_edges_by_community_ids
 
 void GraphGPU::singleton_partition()
 {
+    omp_set_num_threads(NGPU);
     #pragma omp parallel
     {
         int i = omp_get_thread_num() % NGPU;
@@ -306,6 +305,7 @@ void GraphGPU::singleton_partition()
 GraphElem GraphGPU::max_order()
 {
     GraphElem maxs[NGPU];
+    omp_set_num_threads(NGPU);
     #pragma omp parallel
     {
         int i = omp_get_thread_num() % NGPU;
@@ -408,7 +408,7 @@ void GraphGPU::restore_community()
             CudaDeviceSynchronize();
         }
     }
-
+    omp_set_num_threads(NGPU);
     #pragma omp parallel
     {
         int i = omp_get_thread_num() % NGPU;
@@ -422,6 +422,7 @@ void GraphGPU::restore_community()
 void GraphGPU::compute_mass()
 {
     mass_ = 0;
+    omp_set_num_threads(NGPU);
     #pragma omp parallel
     {
         int i = omp_get_thread_num() % NGPU;
@@ -439,6 +440,7 @@ void GraphGPU::compute_mass()
 GraphWeight GraphGPU::compute_modularity()
 {
     GraphWeight q = 0.;
+    omp_set_num_threads(NGPU);
     #pragma omp parallel
     {
         int id = omp_get_thread_num() % NGPU;
@@ -552,8 +554,9 @@ void GraphGPU::shuffle_edge_list()
 {
     //update new ne
     NE_ = sortedIndicesHost_[NV_];
-
     GraphElem* bufferEdges = (GraphElem*)buffer_;
+
+    omp_set_num_threads(omp_get_max_threads());
     #pragma omp parallel for
     for(Int i = 0; i < NV_; ++i)
     {
@@ -590,6 +593,7 @@ void GraphGPU::shuffle_edge_list()
 
 GraphElem GraphGPU::sort_vertex_by_community_ids()
 {
+    omp_set_num_threads(NGPU);
     #pragma omp parallel
     {
         int i =  omp_get_thread_num() % NGPU;
@@ -712,6 +716,7 @@ bool GraphGPU::aggregation()
     shuffle_edge_list();
 
     NV_ = newNv;
+    omp_set_num_threads(omp_get_max_threads());
     #pragma omp parallel for
     for(GraphElem i = 0; i < NV_; ++i)
         indicesHost_[i+1] = sortedIndicesHost_[vertexIdsOffsetHost_[i]];

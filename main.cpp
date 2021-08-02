@@ -1,6 +1,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <omp.h>
 #include "graph.hpp"
 #include "graph_gpu.hpp"
 #include "louvain_gpu.hpp"

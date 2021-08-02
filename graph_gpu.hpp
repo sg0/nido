@@ -9,9 +9,9 @@
 #ifdef MULTIPHASE
 #include "clustering.hpp"
 #endif
+#define NGPU 2
 
 //all indices are stored in global index
-template<const int NGPU>
 class GraphGPU
 {
   private:
@@ -32,11 +32,11 @@ class GraphGPU
     GraphElem* indices_[NGPU];
     GraphWeight* vertexWeights_[NGPU]; 
 
-    GraphElem* commIds_[NGPU];
+    GraphElem*  commIds_[NGPU];
     GraphElem** commIdsPtr_[NGPU];
 
-    GraphWeight* commWeights_[NGPU];
-    GraphElem** commWeightsPtr_[NGPU];
+    GraphWeight*  commWeights_[NGPU];
+    GraphWeight** commWeightsPtr_[NGPU];
 
     GraphElem* newCommIds_[NGPU];
 
@@ -59,8 +59,8 @@ class GraphGPU
     GraphElem e0_[NGPU], e1_[NGPU];  //memory position with respect to edgesHost_
     GraphElem w0_[NGPU], w1_[NGPU];  //memory position with respect to edgeWeightsHost_
 
-    GraphElem v_base_[NGPU]; v_end_[NGPU]; //first and last global indices of the vertices in a given gpu 
-    GraphElem e_base_[NGPU]; e_end_[NGPU]; //firt and last global indices of the edges in a give gpu
+    GraphElem v_base_[NGPU], v_end_[NGPU]; //first and last global indices of the vertices in a given gpu 
+    GraphElem e_base_[NGPU], e_end_[NGPU]; //firt and last global indices of the edges in a give gpu
 
     GraphElem maxPartitions_;
  
@@ -88,7 +88,7 @@ class GraphGPU
         const GraphElem&, 
         const GraphElem&, 
         std::vector<GraphElem>& partition,
-        const GraphElem&,
+        const GraphElem&
     );
 
     GraphElem max_order();
@@ -122,10 +122,11 @@ class GraphGPU
         const GraphElem& e0_local,  //starting local index
         const int& host_id
     );
+
     GraphElem  get_vertex_partition(const Int& i, const int& host_id);
     GraphElem* get_vertex_partition(const int& host_id);
     GraphElem get_num_partitions(const int& host_id);
-    GraphElem GraphGPU::get_num_partitions();
+    GraphElem get_num_partitions();
     GraphElem get_edge_partition(const GraphElem&);
 
     void louvain_update
@@ -152,7 +153,7 @@ class GraphGPU
         const GraphElem& e0,
         const GraphElem& e1,
         const int& host_id
-    )
+    );
 
     void update_community_ids
     (
@@ -163,7 +164,7 @@ class GraphGPU
         const int& host_id
     );
 
-    void restore_community_ids();
+    void restore_community();
 
     #ifdef MULTIPHASE
     bool aggregation();

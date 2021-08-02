@@ -630,7 +630,7 @@ void build_local_commid_offsets_kernel
                 if((u+lane_id) < end)
                 {
                     GraphElem g = edges[u+lane_id];
-                    if(commIds[g/nv_per_device][g%nv_per_device] == target)
+                    if(commIdsPtr[g/nv_per_device][g%nv_per_device] == target)
                         localCount++;
                     else
                         break;
@@ -820,14 +820,14 @@ void louvain_update_kernel
     GraphWeight*  __restrict__ vertexWeights,
     GraphElem*    __restrict__ commIds,
     GraphElem**   __restrict__ commIdsPtr,
-    //GraphWeight*  __restrict__ commWeights,
     GraphWeight** __restrict__ commWeightsPtr,
     GraphElem*   __restrict__ newCommIds,
     const GraphWeight mass,
     const GraphElem v_base,
     const GraphElem e_base,
     const GraphElem nv,
-    const GraphElem V0
+    const GraphElem V0,
+    const GraphElem nv_per_device
 )
 {
     __shared__ GraphWeight self_shared[BlockSize/WarpSize];
@@ -962,7 +962,6 @@ void louvain_update_cuda
     GraphWeight* vertexWeights, 
     GraphElem*    commIds,
     GraphElem**   commIdsPtr, 
-    //GraphWeight*  commWeights,
     GraphWeight** commWeightsPtr, 
     GraphElem*   newCommIds,
     const GraphWeight& mass, 
@@ -981,8 +980,8 @@ void louvain_update_cuda
     nblocks = (nblocks > MAX_GRIDDIM) ? MAX_GRIDDIM : nblocks;
 
     CudaLaunch((louvain_update_kernel<BLOCKDIM02,TILESIZE01,TILESIZE02><<<nblocks, BLOCKDIM02, 0, stream>>>
-    (localCommOffsets, localCommNums, edges, edgeWeights, indices, vertexWeights, commIds, commWeights, 
-     newCommIds, mass, v0, e0, v1-v0)));
+    (localCommOffsets, localCommNums, edges, edgeWeights, indices, vertexWeights, commIds, commIdsPtr, 
+     commWeightsPtr, newCommIds, mass, v0, e0, v1-v0, V0, nv_per_device)));
 }
 
 template<const int WarpSize=32>

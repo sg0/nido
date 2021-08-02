@@ -128,5 +128,4 @@ struct less_int2
     };
 };
 #endif
-
 #endif

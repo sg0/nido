@@ -2,6 +2,7 @@
 #include <thrust/execution_policy.h>
 //#include <thrust/device_ptr.h>
 #include <thrust/functional.h>
+#include <omp.h>
 
 #include "graph_gpu.hpp"
 #include "graph_cuda.hpp"
@@ -9,11 +10,11 @@
 #include "graph.hpp"
 #include "cuda_wrapper.hpp"
 
-#ifdef CHECK
-#include "graph_cpu.hpp"
-#endif
+//#ifdef CHECK
+//#include "graph_cpu.hpp"
+//#endif
 
-GraphGPU::GraphGPU(Graph* graph) : graph_(graph) 
+GraphGPU::GraphGPU(Graph* graph) : graph_(graph), 
 NV_(0), NE_(0), nv_per_device_(0), maxOrder_(0), 
 mass_(0), maxPartitions_(0)
 {
@@ -40,7 +41,7 @@ mass_(0), maxPartitions_(0)
             CudaCall(cudaStreamCreate(&cuStreams[id][i]));
 
         e0_[id] = 0; e1_[id] = 0;
-        v0_[id] = 0; v1_[id] = 0;
+        w0_[id] = 0; w1_[id] = 0;
 
         v_base_[id]  = nv_per_device_*id;
         if(v_base_[id] > NV_) v_base_[id] = NV_;
@@ -114,8 +115,8 @@ mass_(0), maxPartitions_(0)
             if(i != j)
                 CudaCall(cudaDeviceEnablePeerAccess(j, 0));
         }
-        CudaMemcpy(commIdsPtr_[i], commIds_, sizeof(GraphElem*)*NGPU);
-        CudaMemcpy(commWeightsPtr_[i], commWeights_, sizeof(GraphWeight*)*NGPU);
+        CudaMemcpyHtoD(commIdsPtr_[i],     commIds_,     sizeof(GraphElem*)*NGPU);
+        CudaMemcpyHtoD(commWeightsPtr_[i], commWeights_, sizeof(GraphWeight*)*NGPU);
     }
 
     maxPartitions_ = vertex_partition_[0].size();
@@ -314,7 +315,7 @@ GraphElem GraphGPU::max_order()
         else
             maxs[i] = 0;
     }
-    max = maxs[0];
+    GraphElem max = maxs[0];
     #pragma unroll
     for(int i = 1; i < NGPU; ++i)
         if(max < maxs[i])
@@ -376,7 +377,7 @@ void GraphGPU::update_community_weights
     GraphElem nv = v1-v0;
     GraphElem V0 = v_base_[host_id];
     if(nv > 0)
-        update_community_weights_cuda(commWeightsPtr_, commIds_[host_id]+v0-V0, newCommIds_[host_id]+v0-V0, 
+        update_community_weights_cuda(commWeightsPtr_[host_id], commIds_[host_id]+v0-V0, newCommIds_[host_id]+v0-V0, 
                                       vertexWeights_[host_id]+v0-V0, nv, nv_per_device_);
  
 }
@@ -403,7 +404,7 @@ void GraphGPU::restore_community()
         if(nv_[i] > 0)
         {
             CudaSetDevice(i);
-            update_community_weights_cuda(commWeightsPtr_, commIds_[i], newCommIds_[i], vertexWeights_[i], nv_[i], nv_per_device_);
+            update_community_weights_cuda(commWeightsPtr_[i], commIds_[i], newCommIds_[i], vertexWeights_[i], nv_[i], nv_per_device_);
             CudaDeviceSynchronize();
         }
     }
@@ -413,7 +414,7 @@ void GraphGPU::restore_community()
         int i = omp_get_thread_num() % NGPU;
         CudaSetDevice(i);
         if(nv_[i] > 0)
-            exchange_vector_cuda<GraphElem>(commIds_[i], newCommIds_[i], nv_[i], nv_per_device_);
+            exchange_vector_cuda<GraphElem>(commIds_[i], newCommIds_[i], nv_[i]);
         CudaDeviceSynchronize();
     }
 }
@@ -440,22 +441,23 @@ GraphWeight GraphGPU::compute_modularity()
     GraphWeight q = 0.;
     #pragma omp parallel
     {
-        id = omp_get_thread_num() % NGPU;
+        int id = omp_get_thread_num() % NGPU;
         CudaSetDevice(id);
-
+ 
         GraphWeight* mod;
         GraphElem num = MAX_GRIDDIM*BLOCKDIM02/WARPSIZE;
 
         CudaMalloc(mod,    sizeof(GraphWeight)*num);
         CudaMemset(mod, 0, sizeof(GraphWeight)*num);
+        GraphElem V0 = v_base_[id];
 
         for(GraphElem b = 0; b < vertex_partition_[id].size()-1; ++b)
         {
             GraphElem v0 = vertex_partition_[id][b];
             GraphElem v1 = vertex_partition_[id][b+1];
 
-            GraphElem e0 = indicesHost_[id][v0];
-            GraphElem e1 = indicesHost_[id][v1];
+            GraphElem e0 = indicesHost_[v0];
+            GraphElem e1 = indicesHost_[v1];
             GraphElem ne = e1-e0;
 
             move_edges_to_device(e0, e1, id, cuStreams[id][1]);

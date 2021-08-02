@@ -1,3 +1,4 @@
+#include <omp.h>
 #include "louvain_gpu.hpp"
 #include "graph_gpu.hpp"
 #include "cuda_wrapper.hpp"
@@ -134,8 +135,9 @@ void LouvainGPU::run(GraphGPU* graph)
 
     std::cout << "Total time elapse " << ttime*1E-03 << " s" << std::endl;
     //std::cout << "----------------------------------------\n";
-    for(itn i = 0; i < NGPU; ++i)
+    for(int i = 0; i < NGPU; ++i)
     {
+        CudaSetDevice(i);
         CudaCall(cudaStreamDestroy(cuStreams[i][0]));
         CudaCall(cudaStreamDestroy(cuStreams[i][1]));
     }

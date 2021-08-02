@@ -213,7 +213,6 @@ void compute_modularity_reduce_cuda
     GraphElem*    indices,
     GraphElem*    commIds,
     GraphElem**   commIdsPtr,
-    GraphWeight*  commWeights,
     GraphWeight** commWeightsPtr,
     GraphElem*    localCommOffsets,
     GraphElem*    localCommNums, 

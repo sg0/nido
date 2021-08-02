@@ -6,12 +6,12 @@ graph_ft_load=1
 #check=1
 ifeq ($(debug), 1)
 	CUFLAGS = -g -G -Ddebug --std=c++14 --gpu-architecture=compute_${SM} --gpu-code=sm_${SM},compute_${SM} \
-                  -Xcompiler -O3 -Xcompiler -fopenmp -DMULTIPHASE
-	CFLAGS = -g -Ddebug -std=c++14 -Wextra -Wall -DMULTIPHASE
+                  -Xcompiler -O3 -Xcompiler -fopenmp #-DMULTIPHASE
+	CFLAGS = -g -Ddebug -std=c++14 -Wextra -Wall #-DMULTIPHASE
 else 
 	CUFLAGS = -O3 -Xptxas -O3 --std=c++14 --gpu-architecture=compute_${SM} --gpu-code=sm_${SM},compute_${SM} \
-                  -Xcompiler -O3 -Xcompiler -fopenmp -DMULTIPHASE
-	CFLAGS = -O3 -std=c++14 -Wextra -Wall -DMULTIPHASE
+                  -Xcompiler -O3 -Xcompiler -fopenmp #-DMULTIPHASE
+	CFLAGS = -O3 -std=c++14 -Wextra -Wall #-DMULTIPHASE
 endif
 
 ifeq ($(check),1)

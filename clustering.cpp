@@ -13,7 +13,7 @@ void Clustering::update_clustering(GraphElem* commIdsHost)
     #pragma omp parallel for
     for(GraphElem i = 0; i < nv_; ++i)
     {
-        GraphElem myId = commIdsHost_[commIds[i]];
+        GraphElem myId = commIdsHost[commIds_[i]];
         commIds_[i] = myId;
     }
 }

@@ -59,7 +59,7 @@ mass_(0), maxPartitions_(0)
         GraphElem nv = nv_[id];
         GraphElem ne = ne_[id];
 
-        std::cout << id << " " << nv << " " << ne << std::endl; 
+        std::cout << id << " " << nv << " " << ne << " " << nv_per_device_ << std::endl; 
         //alloc buffer
         CudaMalloc(indices_[id],       sizeof(GraphElem)   *(nv+1));
         CudaMalloc(vertexWeights_[id], sizeof(GraphWeight) *nv);

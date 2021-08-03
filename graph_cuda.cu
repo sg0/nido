@@ -601,6 +601,7 @@ void build_local_commid_offsets_kernel
     GraphElem v1 = (nv + (BlockSize/WarpSize)*gridDim.x-1)/((BlockSize/WarpSize)*gridDim.x);
     GraphElem v0 = (threadIdx.x / WarpSize + (BlockSize/WarpSize)*blockIdx.x)*v1;
     v1 += v0;
+    if(v0 > nv) v0 = nv;
     if(v1 > nv) v1 = nv;
 
     v0 += v_base;
@@ -848,6 +849,7 @@ void louvain_update_kernel
     GraphElem v0 = (warp_id + (BlockSize/WarpSize)*blockIdx.x)*v1;
 
     v1 += v0;
+    if(v0 > nv) v0 = nv;
     if(v1 > nv) v1 = nv;
     v0 += v_base;
     v1 += v_base;
@@ -1089,6 +1091,7 @@ void compute_modularity_reduce_kernel
     GraphElem v0 = (warp_id + (BlockSize/WarpSize)*blockIdx.x)*v1;
 
     v1 += v0;
+    if(v0 > nv) v0 = nv;
     if(v1 > nv) v1 = nv;
     v0 += v_base;
     v1 += v_base;

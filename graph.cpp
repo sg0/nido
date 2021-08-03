@@ -471,6 +471,7 @@ weights_(nullptr)
     neigh_scan_weights();
     neigh_scan_max_weight();
     neigh_scan_max_order();
+    print_stats();
 }
 
 Int* Graph::get_index_ranges()

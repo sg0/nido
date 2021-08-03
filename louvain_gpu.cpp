@@ -94,10 +94,7 @@ void LouvainGPU::run(GraphGPU* graph)
                         CudaDeviceSynchronize();
                         #pragma omp barrier
                     }
-                    //CudaDeviceSynchronize();
-                    //#pragma omp barrier
                 }
-                #pragma omp barrier
             }
             Float Qtmp = graph->compute_modularity();
             dQ = Qtmp - Q;

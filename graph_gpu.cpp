@@ -90,6 +90,7 @@ mass_(0), maxPartitions_(0)
         keys_ptr[id]   = thrust::device_pointer_cast(commIdKeys_[id]);
 
         sum_vertex_weights(id);
+        CudaDeviceSynchronize();
     }
     maxOrder_ = max_order();
     std::cout << "max order is " << maxOrder_ << std::endl;
@@ -190,7 +191,7 @@ void GraphGPU::determine_optimal_vertex_partition
 )
 {
     vertex_partition.push_back(V0);
-    GraphElem start = 0;
+    GraphElem start = indices[V0];
     GraphElem end = 0;
     for(GraphElem idx = 1; idx <= nv; ++idx)
     {

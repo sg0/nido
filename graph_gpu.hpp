@@ -9,7 +9,7 @@
 #ifdef MULTIPHASE
 #include "clustering.hpp"
 #endif
-#define NGPU 4
+#define NGPU 1
 
 //all indices are stored in global index
 class GraphGPU

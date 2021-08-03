@@ -268,7 +268,7 @@ void GraphGPU::sort_edges_by_community_ids
     {
         GraphElem ne = e1-e0;
         GraphElem V0 = v_base_[host_id];
-
+        
         fill_index_orders_cuda(indexOrders_[host_id], indices_[host_id], v0, v1, e0, e1, V0, cuStreams[host_id][0]);
 
         fill_edges_community_ids_cuda(commIdKeys_[host_id], edges_[host_id]+e0_local, indices_[host_id], commIdsPtr_[host_id]
@@ -491,7 +491,7 @@ void GraphGPU::move_edges_to_device
 {
     if(e1 > e0)
     {
-        if(e0 != e0_[host_id] or e1 != e1_[host_id])
+        if(e0 < e0_[host_id] or e1 > e1_[host_id])
         {
             GraphElem ne = e1-e0;
             e0_[host_id] = e0; e1_[host_id] = e1;
@@ -525,7 +525,7 @@ void GraphGPU::move_weights_to_device
 {
     if(e1 > e0)
     {
-        if(e0 != w0_[host_id] or e1 != w1_[host_id])
+        if(e0 < w0_[host_id] or e1 > w1_[host_id])
         {
             GraphElem ne = e1-e0;
             w0_[host_id] = e0; w1_[host_id] = e1;

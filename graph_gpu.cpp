@@ -59,7 +59,7 @@ mass_(0), maxPartitions_(0)
         GraphElem nv = nv_[id];
         GraphElem ne = ne_[id];
 
-        std::cout << id << " " << nv << " " << ne << " " << nv_per_device_ << std::endl; 
+        //std::cout << id << " " << nv << " " << ne << " " << nv_per_device_ << std::endl; 
         //alloc buffer
         CudaMalloc(indices_[id],       sizeof(GraphElem)   *(nv+1));
         CudaMalloc(vertexWeights_[id], sizeof(GraphWeight) *nv);
@@ -90,7 +90,7 @@ mass_(0), maxPartitions_(0)
         keys_ptr[id]   = thrust::device_pointer_cast(commIdKeys_[id]);
 
         sum_vertex_weights(id);
-        CudaDeviceSynchronize();
+        //CudaDeviceSynchronize();
     }
     maxOrder_ = max_order();
     std::cout << "max order is " << maxOrder_ << std::endl;
@@ -206,7 +206,7 @@ void GraphGPU::determine_optimal_vertex_partition
     vertex_partition.push_back(V0+nv);
 }
 
-GraphElem  GraphGPU::get_vertex_partition(const Int& i, const int& host_id)
+GraphElem GraphGPU::get_vertex_partition(const Int& i, const int& host_id)
 {
     Int size = vertex_partition_[host_id].size();
     if(size <= i)
@@ -274,7 +274,7 @@ void GraphGPU::sort_edges_by_community_ids
 
         fill_edges_community_ids_cuda(commIdKeys_[host_id], edges_[host_id]+e0_local, indices_[host_id], commIdsPtr_[host_id]
         , v0, v1, e0, e1, V0, nv_per_device_, cuStreams[host_id][1]);
-    
+
         thrust::stable_sort_by_key(keys_ptr[host_id], keys_ptr[host_id]+ne, orders_ptr[host_id], comp);
 
         reorder_edges_by_keys_cuda(edges_[host_id]+e0_local, indexOrders_[host_id], indices_[host_id], 
@@ -336,12 +336,9 @@ void GraphGPU::sum_vertex_weights(const int& host_id)
         GraphElem e0 = indicesHost_[v0];
         GraphElem e1 = indicesHost_[v1];
 
-        //CudaMemcpyAsyncHtoD(edgeWeights_, edgeWeightsHost_+e0, sizeof(GraphWeight)*(e1-e0), 0);
+        move_weights_to_device(e0, e1, host_id);
         if(v1 > v0)
-        {
-            move_weights_to_device(e0, e1, host_id);
             sum_vertex_weights_cuda(vertexWeights_[host_id], edgeWeights_[host_id], indices_[host_id], v0, v1, e0, e1, V0);
-        }
     }
 }
 

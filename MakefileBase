@@ -6,12 +6,12 @@ graph_ft_load=1
 #check=1
 ifeq ($(debug), 1)
 	CUFLAGS = -g -G -Ddebug --std=c++14 --gpu-architecture=compute_${SM} --gpu-code=sm_${SM},compute_${SM} \
-                  -Xcompiler -O3 -Xcompiler -fopenmp #-DMULTIPHASE
-	CFLAGS = -g -Ddebug -std=c++14 -Wextra -Wall #-DMULTIPHASE
+                  -Xcompiler -fopenmp -DMULTIPHASE
+	CFLAGS = -g -Ddebug -std=c++14 -Wextra -Wall -DMULTIPHASE
 else 
 	CUFLAGS = -O3 -Xptxas -O3 --std=c++14 --gpu-architecture=compute_${SM} --gpu-code=sm_${SM},compute_${SM} \
-                  -Xcompiler -O3 -Xcompiler -fopenmp #-DMULTIPHASE
-	CFLAGS = -O3 -std=c++14 -Wextra -Wall #-DMULTIPHASE
+                  -Xcompiler -O3 -Xcompiler -fopenmp -DMULTIPHASE -DPRINT
+	CFLAGS = -O3 -std=c++14 -Wextra -Wall -DMULTIPHASE -DPRINT
 endif
 
 ifeq ($(check),1)
@@ -48,7 +48,7 @@ graph.o: graph.cpp graph.hpp types.hpp
 graph_gpu.o: graph_gpu.cpp graph_gpu.hpp cuda_wrapper.hpp types.hpp
 	${NVCC} -x cu ${CUFLAGS} -dc -c $< -o $@
 
-louvain_cuda.o: louvain_gpu.cpp louvain_gpu.hpp cuda_wrapper.hpp types.hpp
+louvain_gpu.o: louvain_gpu.cpp louvain_gpu.hpp cuda_wrapper.hpp types.hpp
 	${NVCC} -x cu ${CUFLAGS} -dc -c $< -o $@
 
 main.o: main.cpp graph.hpp graph_gpu.hpp cuda_wrapper.hpp types.hpp louvain_gpu.hpp
@@ -69,10 +69,10 @@ graph_cpu.o: graph_cpu.cpp graph_cpu.hpp
 endif
 
 ifeq ($(check),1)
-${EXE}: graph_gpu.o graph_cuda.o graph.o louvain_cuda.o main.o heap.o clustering.o graph_cpu.o
+${EXE}: graph_gpu.o graph_cuda.o graph.o louvain_gpu.o main.o heap.o clustering.o graph_cpu.o
 	${NVCC} ${CUFLAGS} $^ -o $@
 else
-${EXE}: graph_gpu.o graph_cuda.o graph.o louvain_cuda.o main.o heap.o clustering.o
+${EXE}: graph_gpu.o graph_cuda.o graph.o louvain_gpu.o main.o heap.o clustering.o
 	${NVCC} ${CUFLAGS} $^ -o $@
 endif
 

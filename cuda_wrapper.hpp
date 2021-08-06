@@ -107,8 +107,10 @@ CudaCall(cudaDeviceSynchronize())
 
 #ifdef USE_32BIT_GRAPH
 #define MAX_FLOAT	1.0E+38
+#define EPS		1.19E-7
 #else
 #define MAX_FLOAT       1.0E+308
+#define EPS		2.22E-16
 #endif
 
 #ifdef USE_32BIT_GRAPH

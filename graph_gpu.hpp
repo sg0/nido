@@ -9,7 +9,7 @@
 #ifdef MULTIPHASE
 #include "clustering.hpp"
 #endif
-#define NGPU 4
+#define NGPU 8
 
 //all indices are stored in global index
 class GraphGPU
@@ -40,6 +40,9 @@ class GraphGPU
 
     GraphElem* newCommIds_[NGPU];
 
+    GraphElem* localCommNums_[NGPU];
+    GraphElem* localOffsets_[NGPU];
+
     GraphElem maxOrder_;
     GraphWeight mass_;
 
@@ -63,9 +66,10 @@ class GraphGPU
     GraphElem e_base_[NGPU], e_end_[NGPU]; //firt and last global indices of the edges in a give gpu
 
     GraphElem maxPartitions_;
- 
+
+    GraphElem ne_per_partition_cap_;
     #ifdef MULTIPHASE
-    void* buffer_;
+    void*       buffer_;
     GraphElem*  commIdsHost_;
     GraphElem*  vertexIdsHost_;
     GraphElem*  vertexIdsOffsetHost_;
@@ -100,6 +104,7 @@ class GraphGPU
     GraphElem sort_vertex_by_community_ids();
     void shuffle_edge_list();
     void compress_all_edges();
+    void compress_edges();
 
     Clustering* clusters_;
 

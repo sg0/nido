@@ -90,9 +90,9 @@ void fill_edges_community_ids_cuda
 {
     GraphElem nv = v1-v0;
     //std::cout << nv << std::endl;
-    long long nblocks = (nv+(BLOCKDIM04/TILESIZE01)-1)/(BLOCKDIM04/TILESIZE01);
+    long long nblocks = (nv+(BLOCKDIM04/TILESIZE02)-1)/(BLOCKDIM04/TILESIZE02);
     nblocks = (nblocks > MAX_GRIDDIM) ? MAX_GRIDDIM : nblocks;
-    CudaLaunch((fill_edges_community_ids_kernel<TILESIZE01, BLOCKDIM04><<<nblocks, BLOCKDIM04, 0, stream>>>
+    CudaLaunch((fill_edges_community_ids_kernel<TILESIZE02, BLOCKDIM04><<<nblocks, BLOCKDIM04, 0, stream>>>
     (commIdKeys, edges, indices, commIdsPtr, v0, e0, nv, V0, nv_per_device)));
 }
 
@@ -838,7 +838,7 @@ void reorder_weights_by_keys_cuda
 }
 #endif
 
-//#if 0
+#if 0
 template<const int BlockSize, const int WarpSize=32>
 __global__
 void build_local_commid_offsets_kernel
@@ -910,7 +910,7 @@ void build_local_commid_offsets_kernel
         ///warp.sync();
     }
 }
-//#endif
+#endif
 #if 0
 template<const int BlockSize, const int WarpSize=32>
 __global__
@@ -980,13 +980,91 @@ void build_local_commid_offsets_kernel
 }
 #endif
 
+template<const int BlockSize, const int WarpSize=32>
+__global__
+void build_local_commid_offsets_kernel
+(
+    GraphElem*  __restrict__ localOffsets,
+    GraphElem*  __restrict__ localCommNums,
+    GraphElem2* __restrict__ commIdKeys,
+    //GraphElem*   __restrict__ edges,
+    GraphElem*   __restrict__ indices,
+    //GraphElem**  __restrict__ commIdsPtr,
+    const GraphElem v_base,
+    const GraphElem e_base,
+    const GraphElem nv,
+    const GraphElem V0,
+    const GraphElem nv_per_device
+)
+{  
+    cg::thread_block_tile<WarpSize> warp = cg::tiled_partition<WarpSize>(cg::this_thread_block());
+    unsigned lane_id = threadIdx.x &(WarpSize-1);
+    GraphElem v1 = (nv + (BlockSize/WarpSize)*gridDim.x-1)/((BlockSize/WarpSize)*gridDim.x);
+    GraphElem v0 = (threadIdx.x / WarpSize + (BlockSize/WarpSize)*blockIdx.x)*v1;
+    v1 += v0;
+    if(v0 > nv) v0 = nv;
+    if(v1 > nv) v1 = nv;
+
+    v0 += v_base;
+    v1 += v_base;
+
+    GraphElem start = indices[v0-V0]-e_base;
+    GraphElem end = 0;
+    for(GraphElem v = v0; v < v1; ++v)
+    {
+        if(lane_id == 0)
+            end   = indices[v+1-V0]-e_base;
+        end   = warp.shfl(end, 0);
+        
+        volatile GraphElem  count = 0;
+        GraphElem2 target;
+        volatile GraphElem  localId = 0;
+
+        while(count < end-start)
+        {
+            if(lane_id == 0x00)
+                localOffsets[start+localId] = count;
+            //GraphElem f = edges[start+count];
+            target = commIdKeys[start+count]; 
+            //target = commIdsPtr[f/nv_per_device][f%nv_per_device];
+            //target = f.y;
+            volatile unsigned localCount = 0;
+            for(GraphElem u = start+count; u < end; u += WarpSize)
+            {
+                if((u+lane_id) < end)
+                {
+                    //GraphElem g = edges[u+lane_id];
+                    GraphElem2 g = commIdKeys[u+lane_id];
+                    //if(commIdsPtr[g/nv_per_device][g%nv_per_device] == target)
+                    if(g.y == target.y)
+                        localCount++;
+                    else
+                        break;
+                }
+            }
+            ///warp.sync();
+            #pragma unroll
+            for(int i = WarpSize/2; i > 0; i/=2)
+                localCount += warp.shfl_down(localCount, i);
+            count += localCount;
+            count = warp.shfl(count, 0);
+            localId++;
+        }
+        start = end;
+        if(lane_id == 0x00)
+            localCommNums[v-v_base] = localId;
+        ///warp.sync();
+    }
+}
+
 void build_local_commid_offsets_cuda
 (
     GraphElem*  localOffsets,
     GraphElem*  localCommNums,
-    GraphElem*  edges,
+    GraphElem2* commIdKeys,
+    //GraphElem*  edges,
     GraphElem*  indices,
-    GraphElem** commIdsPtr,
+    //GraphElem** commIdsPtr,
     const GraphElem& v0,
     const GraphElem& v1,
     const GraphElem& e0,
@@ -997,11 +1075,13 @@ void build_local_commid_offsets_cuda
 )
 {
     GraphElem nv = v1-v0;
-    long long nblocks = (nv+(BLOCKDIM04/2-1))/(BLOCKDIM04/2);
+    long long nblocks = (nv+(BLOCKDIM04/8-1))/(BLOCKDIM04/8);
     nblocks = (nblocks > MAX_GRIDDIM) ? MAX_GRIDDIM : nblocks;
 
-    CudaLaunch((build_local_commid_offsets_kernel<BLOCKDIM04,2><<<nblocks, BLOCKDIM04, 0, stream>>>
-    (localOffsets, localCommNums, edges, indices, commIdsPtr, v0, e0, nv, V0, nv_per_device)));
+    CudaLaunch((build_local_commid_offsets_kernel<BLOCKDIM04,8><<<nblocks, BLOCKDIM04, 0, stream>>>
+    (localOffsets, localCommNums, commIdKeys, indices, v0, e0, nv, V0, nv_per_device)));
+    //CudaLaunch((build_local_commid_offsets_kernel<BLOCKDIM04,2><<<nblocks, BLOCKDIM04, 0, stream>>>
+    //(localOffsets, localCommNums, edges, indices, commIdsPtr, v0, e0, nv, V0, nv_per_device)));
     //CudaLaunch((build_local_commid_offsets_kernel<BLOCKDIM03,16><<<nblocks, BLOCKDIM03, 0, stream>>>
     //(localOffsets,localCommNums, edges, indices, commIdsPtr, v0, e0, nv)));
 }
@@ -1143,8 +1223,8 @@ template<const int BlockSize, const int WarpSize, const int TileSize>
 __global__
 void louvain_update_kernel
 (
-    GraphElem* localCommOffsets,
-    GraphElem* localCommNums,
+    GraphElem*    __restrict__ localCommOffsets,
+    GraphElem*     __restrict__ localCommNums,
     GraphElem*    __restrict__ edges,
     GraphWeight*  __restrict__ edgeWeights,
     GraphElem*    __restrict__ indices,
@@ -1307,10 +1387,10 @@ void louvain_update_cuda
 {
     const GraphElem nv = v1-v0;
 
-    long long nblocks = (nv + (BLOCKDIM02/TILESIZE01-1))/(BLOCKDIM02/TILESIZE01);
+    long long nblocks = (nv + (BLOCKDIM03/TILESIZE01-1))/(BLOCKDIM03/TILESIZE01);
     nblocks = (nblocks > MAX_GRIDDIM) ? MAX_GRIDDIM : nblocks;
 
-    CudaLaunch((louvain_update_kernel<BLOCKDIM02,TILESIZE01,TILESIZE02><<<nblocks, BLOCKDIM02, 0, stream>>>
+    CudaLaunch((louvain_update_kernel<BLOCKDIM03,TILESIZE01,TILESIZE02><<<nblocks, BLOCKDIM03, 0, stream>>>
     (localCommOffsets, localCommNums, edges, edgeWeights, indices, vertexWeights, commIds, commIdsPtr, 
      commWeightsPtr, newCommIds, mass, v0, e0, v1-v0, V0, nv_per_device)));
 }
@@ -1572,8 +1652,8 @@ void compute_modularity_reduce_kernel
     GraphElem*    __restrict__ commIds,
     GraphElem**   __restrict__ commIdsPtr,
     GraphWeight** __restrict__ commWeightsPtr,
-    GraphElem* localCommOffsets,
-    GraphElem* localCommNums,
+    GraphElem*    __restrict__ localCommOffsets,
+    GraphElem*    __restrict__ localCommNums,
     const GraphWeight mass,
     const GraphElem v_base,
     const GraphElem e_base,

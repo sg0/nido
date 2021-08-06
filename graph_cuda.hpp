@@ -124,9 +124,10 @@ void build_local_commid_offsets_cuda
 (
     GraphElem*  localOffsets,
     GraphElem*  localCommNums,
-    GraphElem*  edges,
+    GraphElem2* commIdKeys,
+    //GraphElem*  edges,
     GraphElem*  indices,
-    GraphElem** commIdsPtr,
+    //GraphElem** commIdsPtr,
     const GraphElem& v0,
     const GraphElem& v1,
     const GraphElem& e0,

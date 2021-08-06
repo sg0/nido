@@ -12,37 +12,32 @@ void LouvainGPU::run(GraphGPU* graph)
         CudaCall(cudaStreamCreate(&cuStreams[i][0]));
         CudaCall(cudaStreamCreate(&cuStreams[i][1]));
     }
-    /* 
-    cudaEvent_t start, stop;
-    cudaEvent_t totalStart, totalStop;
 
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
+    double total_start, total_end;
+    double loop_time = 0;
 
-    cudaEventCreate(&totalStart);
-    cudaEventCreate(&totalStop);
-    */
+    int totalLoops = 0;
     bool done = false;
 
     Int numPhases = 0;
     Int num_partitions = graph->get_num_partitions();
 
-    //cudaEventRecord(totalStart, 0);
+    total_start = omp_get_wtime();
     while(!done)
-    { 
+    {
         std::cout << "PHASE #" << numPhases << ": " << std::endl;
         //std::cout << "----------------------------------------\n";
 
         graph->singleton_partition();
         Float Q = graph->compute_modularity();
-
+        #ifdef PRINT
         std::cout << "LOOP# \tQ \t\tdQ\n";
         std::cout << "----------------------------------------\n";
         std::cout << 0 << " \t" << Q << " \t" << 0 << std::endl;
+        #endif
 
         Float dQ = MAX_FLOAT;
         Int loops = 0;
-        //cudaEventRecord(start, 0);
         double start, end;
         start = omp_get_wtime();
         while(tol_ < dQ and loops < maxLoops_)
@@ -78,7 +73,6 @@ void LouvainGPU::run(GraphGPU* graph)
                         
                         GraphElem f0 = graph->get_edge_partition(u0);
                         GraphElem f1 = graph->get_edge_partition(u1);
-                        //std::cout << u0 << " " << u1 << " " << f0 << " " << f1 << std::endl;
 
                         GraphElem f0_local = f0 - e0;
 
@@ -108,38 +102,37 @@ void LouvainGPU::run(GraphGPU* graph)
                 graph->restore_community();
             else
                 Q = Qtmp; 
+
+            #ifdef PRINT
             std::cout << loops << " \t" << Qtmp << " \t" << dQ << std::endl;
+            #endif
         }
         end = omp_get_wtime();
-        /*cudaEventRecord(stop, 0);
-        cudaEventSynchronize(stop);
-        float time;
-        cudaEventElapsedTime(&time, start, stop);
-        */
+
+        totalLoops += loops;
+
         if(loops >= maxLoops_)
             std::cout << "Exceed maximum loop number" << std::endl;
         std::cout << "Final Q: "<< Q << std::endl;
         std::cout << "Time elapse " << end-start << " s" << std::endl;
         std::cout << "----------------------------------------\n";
 
+        loop_time += end-start;
+
         #ifdef MULTIPHASE
-        //CudaDeviceSynchronize();
         done = graph->aggregation();
-        omp_set_num_threads(NGPU);
+        std::cout << "done aggregation\n";
         #else
         done = true;
         #endif
         numPhases++;
-        //CudaDeviceSynchronize();
     }
-/*
-    cudaEventRecord(totalStop, 0);
-    cudaEventSynchronize(totalStop);
-    float ttime;
-    cudaEventElapsedTime(&ttime, totalStart, totalStop);
+    total_end = omp_get_wtime();
+    double total_time = (double)(total_end-total_start);
+    std::cout << "Total time elapse " << total_time << " s" << std::endl;
+    std::cout << "Time per loop: " << loop_time/totalLoops << " s/loop\n";
+    std::cout << "Aggregation time: " << total_time-loop_time << " s\n";
 
-    std::cout << "Total time elapse " << ttime*1E-03 << " s" << std::endl;*/
-    //std::cout << "----------------------------------------\n";
     for(int i = 0; i < NGPU; ++i)
     {
         CudaSetDevice(i);

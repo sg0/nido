@@ -1,17 +1,18 @@
 NVCC:=nvcc
 CC:=g++
 
-SM=70
+#SM=70
+#NGPU=2
 graph_ft_load=1
 #check=1
 ifeq ($(debug), 1)
 	CUFLAGS = -g -G -Ddebug --std=c++14 --gpu-architecture=compute_${SM} --gpu-code=sm_${SM},compute_${SM} \
-                  -Xcompiler -fopenmp -DMULTIPHASE
-	CFLAGS = -g -Ddebug -std=c++14 -Wextra -Wall -DMULTIPHASE
+                  -Xcompiler -fopenmp -DMULTIPHASE -DNGPU=1
+	CFLAGS = -g -Ddebug -std=c++14 -Wextra -Wall -DMULTIPHASE -DNGPU=1
 else 
 	CUFLAGS = -O3 -Xptxas -O3 --std=c++14 --gpu-architecture=compute_${SM} --gpu-code=sm_${SM},compute_${SM} \
-                  -Xcompiler -O3 -Xcompiler -fopenmp -DMULTIPHASE -DPRINT
-	CFLAGS = -O3 -std=c++14 -Wextra -Wall -DMULTIPHASE -DPRINT
+                  -Xcompiler -O3 -Xcompiler -fopenmp -DMULTIPHASE -DPRINT -DNGPU=${NGPU}
+	CFLAGS = -O3 -std=c++14 -Wextra -Wall -DMULTIPHASE -DPRINT -DNGPU=${NGPU}
 endif
 
 ifeq ($(check),1)
@@ -38,7 +39,7 @@ else
 	CFLAGS  += DUSE_64BIT
 endif
 
-EXE:= run
+EXE:= run_${NGPU}_${SM}
 
 all: ${EXE}
 
@@ -77,4 +78,4 @@ ${EXE}: graph_gpu.o graph_cuda.o graph.o louvain_gpu.o main.o heap.o clustering.
 endif
 
 clean:
-	rm -f *.o ${EXE}
+	rm -f *.o

@@ -121,7 +121,7 @@ void LouvainGPU::run(GraphGPU* graph)
 
         #ifdef MULTIPHASE
         done = graph->aggregation();
-        std::cout << "done aggregation\n";
+        //std::cout << "done aggregation\n";
         #else
         done = true;
         #endif

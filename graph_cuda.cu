@@ -1075,10 +1075,10 @@ void build_local_commid_offsets_cuda
 )
 {
     GraphElem nv = v1-v0;
-    long long nblocks = (nv+(BLOCKDIM04/8-1))/(BLOCKDIM04/8);
+    long long nblocks = (nv+(BLOCKDIM02/4-1))/(BLOCKDIM02/4);
     nblocks = (nblocks > MAX_GRIDDIM) ? MAX_GRIDDIM : nblocks;
 
-    CudaLaunch((build_local_commid_offsets_kernel<BLOCKDIM04,8><<<nblocks, BLOCKDIM04, 0, stream>>>
+    CudaLaunch((build_local_commid_offsets_kernel<BLOCKDIM02,4><<<nblocks, BLOCKDIM02, 0, stream>>>
     (localOffsets, localCommNums, commIdKeys, indices, v0, e0, nv, V0, nv_per_device)));
     //CudaLaunch((build_local_commid_offsets_kernel<BLOCKDIM04,2><<<nblocks, BLOCKDIM04, 0, stream>>>
     //(localOffsets, localCommNums, edges, indices, commIdsPtr, v0, e0, nv, V0, nv_per_device)));
@@ -1387,10 +1387,10 @@ void louvain_update_cuda
 {
     const GraphElem nv = v1-v0;
 
-    long long nblocks = (nv + (BLOCKDIM03/TILESIZE01-1))/(BLOCKDIM03/TILESIZE01);
+    long long nblocks = (nv + (BLOCKDIM02/TILESIZE01-1))/(BLOCKDIM02/TILESIZE01);
     nblocks = (nblocks > MAX_GRIDDIM) ? MAX_GRIDDIM : nblocks;
 
-    CudaLaunch((louvain_update_kernel<BLOCKDIM03,TILESIZE01,TILESIZE02><<<nblocks, BLOCKDIM03, 0, stream>>>
+    CudaLaunch((louvain_update_kernel<BLOCKDIM02,TILESIZE01,TILESIZE02><<<nblocks, BLOCKDIM02, 0, stream>>>
     (localCommOffsets, localCommNums, edges, edgeWeights, indices, vertexWeights, commIds, commIdsPtr, 
      commWeightsPtr, newCommIds, mass, v0, e0, v1-v0, V0, nv_per_device)));
 }

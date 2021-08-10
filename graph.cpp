@@ -7,10 +7,11 @@
 #include <fstream>
 #include <cstdint>
 #include <climits>
+#include <set>
 #include "graph.hpp"
 #include "types.hpp"
 #include "heap.hpp"
-
+#include "cuda_wrapper.hpp"
 Int Graph::get_num_vertices()
 {
     return totalVertices_;
@@ -136,7 +137,7 @@ Graph::Graph(const Int& totalVertices, const Int& m0) :
 totalVertices_(totalVertices), max_order_(0), 
 weighted_orders_(nullptr), max_weights_(nullptr), orders_(nullptr),
 indices_(nullptr), totalEdges_(0), edges_(nullptr), 
-weights_(nullptr)
+weights_(nullptr), numColors_(0), colors_(nullptr)
 {
     create_random_network_ba(m0);
     
@@ -318,8 +319,8 @@ void Graph::print_stats()
 Graph::Graph(const std::string& binfile):
 totalVertices_(0), max_order_(0),
 weighted_orders_(nullptr), max_weights_(nullptr), orders_(nullptr),
-indices_(nullptr), totalEdges_(0), edges_(nullptr),
-weights_(nullptr)
+indices_(nullptr), totalEdges_(0), edges_(nullptr), weights_(nullptr),
+numColors_(0), colors_(nullptr)
 {
     using GraphElem = Int;
     using GraphWeight = Float;
@@ -472,6 +473,8 @@ weights_(nullptr)
     neigh_scan_max_weight();
     neigh_scan_max_order();
     print_stats();
+
+    coloring();
 }
 
 Int* Graph::get_index_ranges()
@@ -524,3 +527,148 @@ Community* Partition::get_community(const long& i)
     return community[i]; 
 }
 #endif
+//implement Luby's algorithm for coloring
+void Graph::coloring()
+{
+    colors_ = new GraphElem [totalVertices_];
+    std::fill(colors_, colors_+totalVertices_, -1);
+
+    GraphWeight* randomWeights = new GraphWeight [totalVertices_];
+    std::vector<GraphElem> n_colors; 
+    GraphElem remain = totalVertices_;
+    int n_threads = omp_get_max_threads();
+
+    std::mt19937_64* engines = new std::mt19937_64[n_threads];
+    std::uniform_int_distribution<GraphElem>* rands = new std::uniform_int_distribution<GraphElem>[n_threads]; 
+
+    for(int i = 0; i < n_threads; ++i)
+    {
+        engines[i] = std::mt19937_64(1<<i);
+        rands[i] = std::uniform_int_distribution<GraphElem>(0.,totalVertices_*4LL);
+    }
+
+    omp_set_num_threads(n_threads);
+    #pragma omp parallel for 
+    for(GraphElem i = 0; i < totalVertices_; ++i)
+        randomWeights[i] = rands[i%n_threads](engines[i%n_threads]);
+   
+    while (remain != 0)
+    {
+        GraphElem num = 0;
+        #pragma omp parallel for reduction(+:num)
+        for(GraphElem i = 0; i < totalVertices_; ++i)
+        {
+            // ignore nodes colored earlier
+            if (colors_[i] != -1) 
+                continue; 
+
+            GraphElem ir = randomWeights[i];
+            std::set<GraphElem> c_set;
+            // look at neighbors to check their random number
+            for (GraphElem k = indices_[i]; k < indices_[i+1]; k++) 
+            {        
+                // ignore nodes colored earlier (and yourself)
+                GraphElem j = edges_[k];
+                GraphElem jc = colors_[j];
+                GraphElem jr = randomWeights[j];
+                if(ir <= jr && jc != -1)
+                    c_set.insert(jc);
+            }
+            
+            for(GraphElem k = 0; k < totalVertices_; ++k)
+            {
+                if(c_set.find(k) == c_set.end())
+                {
+                    colors_[i] = k;
+                    break;
+                }
+            }
+            num = num+1;
+        }
+        remain -= num;
+    }
+    delete [] randomWeights;
+    delete [] engines;
+    delete [] rands;
+
+    GraphElem2* colors_id = new GraphElem2 [totalVertices_];
+ 
+    #pragma omp parallel for
+    for(GraphElem i = 0; i < totalVertices_; ++i)
+        colors_id[i] = {colors_[i], i};
+
+    auto compare_as_int2 = [] (GraphElem2 a, GraphElem2 b) {
+        return (a.x != b.x) ? (a.x < b.x) : (a.y < b.y);
+    };
+
+    std::sort(colors_id, colors_id+totalVertices_, compare_as_int2);
+    
+    numColors_ = colors_id[totalVertices_-1].x+1;
+
+    GraphElem* colorsOffset = new GraphElem [numColors_]; 
+ 
+    GraphElem* numEdges = new GraphElem [totalVertices_];
+    GraphElem* sortedIndices = new GraphElem [totalVertices_+1];
+    GraphElem* orders = new  GraphElem [totalVertices_];
+    #pragma omp parallel for
+    for(GraphElem i = 0; i < totalVertices_; ++i)
+    {
+        GraphElem id = colors_id[i].y;
+        numEdges[i] = indices_[id+1]-indices_[id];
+        orders[id] = i;
+    }
+    sortedIndices[0] = 0;
+    std::partial_sum(numEdges, numEdges+totalVertices_, sortedIndices+1);
+
+    #pragma omp parallel for
+    for(GraphElem i = 0; i < totalEdges_; ++i)
+    {
+        GraphElem v = edges_[i];
+        edges_[i] = orders[v];
+    }
+    delete [] numEdges;
+    delete [] colors_id;
+    delete [] colors_;
+
+    void* buff = malloc(sizeof(GraphElem)*totalEdges_);
+
+    GraphElem* bufferEdges = (GraphElem*)buff; 
+    #pragma omp parallel for
+    for(Int i = 0; i < totalVertices_; ++i)
+    {
+        GraphElem pos = orders[i];
+
+        GraphElem start  = sortedIndices[pos+0];
+        GraphElem end    = sortedIndices[pos+1];
+        GraphElem start0 = indices_[i+0];
+        GraphElem num    = end-start;
+        for(GraphElem j = 0; j < num; ++j)
+            bufferEdges[j+start] = edges_[start0+j];
+    }
+    #pragma omp parallel for
+    for(Int i = 0; i < totalEdges_; ++i)
+        edges_[i] = bufferEdges[i];
+
+    GraphWeight* bufferWeights = (GraphWeight*)buff;
+    #pragma omp parallel for
+    for(Int i = 0; i < totalVertices_; ++i)
+    {
+        GraphElem pos = orders[i];
+
+        GraphElem start  = sortedIndices[pos+0];
+        GraphElem end   = sortedIndices[pos+1];
+        GraphElem start0 = indices_[i+0];
+        GraphElem num    = end-start;
+        for(GraphElem j = 0; j < num; ++j)
+            bufferWeights[j+start] = weights_[start0+j];
+    }
+
+    #pragma omp parallel for
+    for(Int i = 0; i < totalEdges_; ++i)
+        weights_[i] = bufferWeights[i];
+
+    free(buff);
+    delete [] orders;
+    delete [] indices_;
+    indices_ = sortedIndices;
+}     

@@ -18,6 +18,11 @@ class Graph
     GraphElem   *edges_;
     GraphWeight *weights_;
 
+    //GraphWeight *randomWeights_;
+    //GraphElem   *colors_;
+    GraphElem  numColors_;
+    GraphElem *colors_;
+  
     //some helper function here
     void sort_edges(EdgeTuple*, const GraphElem&);
     void create_random_network_ba(const GraphElem& m0);
@@ -67,6 +72,7 @@ class Graph
     //print statistics
     void print_stats();
 
+    void coloring();
     //void reset_orders_weights();
     void neigh_scan(const int& num_threads);
     void neigh_scan_weights(const int& num_threads);

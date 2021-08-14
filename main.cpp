@@ -30,13 +30,9 @@ int main(int argc, char** argv)
 
     Int maxLoops = (Int)atoll(argv[pos+1]);
     Float tau = (Float)atof(argv[pos+2]);
-    Int nbatches = (Int)atoll(argv[pos+3]);
-    GraphGPU* graph_gpu = new GraphGPU(graph);
-    
-    //omp_set_num_threads(NGPU);
-    //omp_set_dynamic(0);
+    int nbatches = atoi(argv[pos+3]);
 
-    //Partition* partition = new Partition(graph);
+    GraphGPU* graph_gpu = new GraphGPU(graph, nbatches);
     LouvainGPU* louvain = new LouvainGPU(maxLoops, tau, nbatches);
 
     louvain->run(graph_gpu);

@@ -21,9 +21,15 @@ class GraphGPU
     Graph* graph_;
 
     GraphElem NV_, NE_;
+    int nbatches_;
 
     GraphElem nv_[NGPU], ne_[NGPU], ne_per_partition_[NGPU];
-    GraphElem nv_per_device_;
+
+    GraphElem vertex_per_device_host_[NGPU+1];
+    GraphElem *vertex_per_device_[NGPU];
+    GraphElem *vertex_per_batch_[NGPU];
+
+    std::vector<std::vector<GraphElem> > vertex_per_batch_partition_[NGPU];
 
     GraphElem   *edges_[NGPU];
     GraphWeight *edgeWeights_[NGPU];
@@ -31,7 +37,7 @@ class GraphGPU
     GraphElem2 *commIdKeys_[NGPU];
     GraphElem* indexOrders_[NGPU]; 
 
-    GraphElem* indices_[NGPU];
+    GraphElem*   indices_[NGPU];
     GraphWeight* vertexWeights_[NGPU]; 
 
     GraphElem*  commIds_[NGPU];
@@ -67,9 +73,9 @@ class GraphGPU
     GraphElem v_base_[NGPU], v_end_[NGPU]; //first and last global indices of the vertices in a given gpu 
     GraphElem e_base_[NGPU], e_end_[NGPU]; //firt and last global indices of the edges in a give gpu
 
-    GraphElem maxPartitions_;
+    //GraphElem maxPartitions_;
 
-    GraphElem ne_per_partition_cap_;
+    //GraphElem ne_per_partition_cap_;
     #ifdef MULTIPHASE
     void*       buffer_;
     GraphElem*  commIdsHost_;
@@ -80,7 +86,7 @@ class GraphGPU
     GraphElem2* sortedVertexIdsHost_;
     #endif
 
-    GraphElem determine_optimal_edges_per_batch 
+    GraphElem determine_optimal_edges_per_partition 
     (
         const GraphElem&, 
         const GraphElem&, 
@@ -97,7 +103,11 @@ class GraphGPU
         const GraphElem&
     );
 
+    void determine_edge_device_partition();
+    void partition_graph_edge_batch();
+
     GraphElem max_order();
+
     void sum_vertex_weights(const int&);
     void compute_mass();
 
@@ -112,46 +122,23 @@ class GraphGPU
 
     #endif
 
-  public:
-    GraphGPU (Graph* graph);
-    ~GraphGPU();
-
-    void set_communtiy_ids(GraphElem* commIds);
-    void singleton_partition();
-
-    void compute_community_weights(const int&);
     void sort_edges_by_community_ids
     (
         const GraphElem& v0,   //starting global vertex index 
         const GraphElem& v1,   //ending global vertex index
         const GraphElem& e0,   //starting global edge index
         const GraphElem& e1,   //ending global edge index
-        const GraphElem& e0_local,  //starting local index
         const int& host_id
     );
-
-    GraphElem  get_vertex_partition(const Int& i, const int& host_id);
-    GraphElem* get_vertex_partition(const int& host_id);
-    GraphElem get_num_partitions(const int& host_id);
-    GraphElem get_num_partitions();
-    GraphElem get_edge_partition(const GraphElem&);
 
     void louvain_update
     (
-        const GraphElem& v0, 
+        const GraphElem& v0,
         const GraphElem& v1,
         const GraphElem& e0,
         const GraphElem& e1,
-        const GraphElem& e0_local,
         const int& host_id
     );
-
-    GraphWeight compute_modularity();
-
-    void move_edges_to_device(const GraphElem& v0, const GraphElem& v1, const int& host_id, cudaStream_t stream = 0);
-    void move_edges_to_host(const GraphElem& v0,  const GraphElem& v1, const int& host_id, cudaStream_t stream = 0);
-    void move_weights_to_device(const GraphElem& v0, const GraphElem& v1, const int& host_id, cudaStream_t stream = 0);
-    void move_weights_to_host(const GraphElem& v0, const GraphElem& v1, const int& host_id, cudaStream_t stream = 0);
 
     void update_community_weights
     (
@@ -168,6 +155,74 @@ class GraphGPU
         const GraphElem& v1,
         const GraphElem& u0,
         const GraphElem& u1,
+        const int& host_id
+    );
+
+  public:
+    GraphGPU (Graph* graph, const int& nbatches);
+    ~GraphGPU();
+
+    void set_communtiy_ids(GraphElem* commIds);
+    void singleton_partition();
+
+    void compute_community_weights(const int&);
+
+    GraphWeight compute_modularity();
+
+    void sort_edges_by_community_ids
+    (
+        const int& batch,
+        const int& host_id
+    );
+
+    void louvain_update
+    (
+        const int& batch,
+        const int& host_id
+    );
+    
+    void move_edges_to_device
+    (
+        const GraphElem& e0, 
+        const GraphElem& e1, 
+        const int& host_id, 
+        cudaStream_t stream = 0
+    );
+
+    void move_edges_to_host
+    (
+        const GraphElem& e0,  
+        const GraphElem& e1, 
+        const int& host_id, 
+        cudaStream_t stream = 0
+    );
+
+    void move_weights_to_device
+    (
+        const GraphElem& e0, 
+        const GraphElem& e1, 
+        const int& host_id, 
+        cudaStream_t stream = 0
+    );
+
+    void move_weights_to_host
+    (
+        const GraphElem& e0, 
+        const GraphElem& e1, 
+        const int& host_id, 
+        cudaStream_t stream = 0
+    );
+
+    
+    void update_community_weights
+    (
+        const int& batch,
+        const int& host_id
+    );
+
+    void update_community_ids
+    (
+        const int& batch,
         const int& host_id
     );
 

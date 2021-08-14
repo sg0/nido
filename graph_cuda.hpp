@@ -24,7 +24,7 @@ void fill_edges_community_ids_cuda
     const GraphElem& e0,
     const GraphElem& e1,
     const GraphElem& V0,
-    const GraphElem& nv_per_device,
+    GraphElem* vertex_per_device,
     cudaStream_t stream = 0
 );
 
@@ -56,10 +56,11 @@ void sum_vertex_weights_cuda
 void compute_community_weights_cuda
 (
     GraphWeight** commWeights,
-    GraphElem* commIds, 
-    GraphWeight* vertexWeights,
+    GraphElem*    commIds, 
+    GraphWeight*  vertexWeights,
     const GraphElem& nv,
-    const GraphElem& nv_per_device,
+    const GraphElem& V0,
+    GraphElem* vertex_per_device,
     cudaStream_t stream = 0
 );
 
@@ -133,7 +134,6 @@ void build_local_commid_offsets_cuda
     const GraphElem& e0,
     const GraphElem& e1,
     const GraphElem& V0,
-    const GraphElem& nv_per_device,
     cudaStream_t stream = 0
 );
 
@@ -155,7 +155,7 @@ void louvain_update_cuda
     const GraphElem& e0,
     const GraphElem& e1,
     const GraphElem& V0,
-    const GraphElem& nv_per_device,
+    GraphElem* vertex_per_device,
     cudaStream_t stream = 0
 );
 /*
@@ -177,7 +177,7 @@ void update_community_weights_cuda
     GraphElem* newCommIds,
     GraphWeight* vertexWeights,
     const GraphElem& nv,
-     const GraphElem& nv_per_device,
+    GraphElem* vertex_per_device,
     cudaStream_t stream = 0
 );
 
@@ -223,7 +223,7 @@ void compute_modularity_reduce_cuda
     const GraphElem& e0,
     const GraphElem& e1,
     const GraphElem& V0,
-    const GraphElem& nv_per_device,
+    GraphElem* vertex_per_device,
     cudaStream_t stream = 0
 );
 

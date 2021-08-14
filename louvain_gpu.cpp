@@ -20,8 +20,6 @@ void LouvainGPU::run(GraphGPU* graph)
     bool done = false;
 
     Int numPhases = 0;
-    Int num_partitions = graph->get_num_partitions();
-
     total_start = omp_get_wtime();
     while(!done)
     {
@@ -30,6 +28,7 @@ void LouvainGPU::run(GraphGPU* graph)
 
         graph->singleton_partition();
         Float Q = graph->compute_modularity();
+
         #ifdef PRINT
         std::cout << "LOOP# \tQ \t\tdQ\n";
         std::cout << "----------------------------------------\n";
@@ -48,51 +47,21 @@ void LouvainGPU::run(GraphGPU* graph)
                 int g =  omp_get_thread_num() % NGPU;
                 CudaSetDevice(g);
 
-                for(Int part = 0; part < num_partitions; ++part)
+                for(int batch = 0; batch < nbatches_; ++batch)
                 {
-                    GraphElem v0 = graph->get_vertex_partition(part+0, g);
-                    GraphElem v1 = graph->get_vertex_partition(part+1, g);
-
-                    GraphElem e0 = graph->get_edge_partition(v0);
-                    GraphElem e1 = graph->get_edge_partition(v1);
-
-                    graph->move_edges_to_device(e0, e1, g, cuStreams[g][0]);
-                    graph->move_weights_to_device(e0, e1, g, cuStreams[g][1]);
-
-                    GraphElem nv_per_batch = (v1-v0+nbatches_-1)/nbatches_;
-
+                    graph->louvain_update(batch, g); 
                     CudaDeviceSynchronize();
                     #pragma omp barrier 
  
-                    for(Int b = 0; b < nbatches_; ++b)
+                    #pragma omp critical
                     {
-                        GraphElem u0 = b*nv_per_batch+v0;
-                        if(u0 > v1) u0 = v1;
-                        GraphElem u1 = u0 + nv_per_batch;
-                        if(u1 > v1) u1 = v1;
-                        
-                        GraphElem f0 = graph->get_edge_partition(u0);
-                        GraphElem f1 = graph->get_edge_partition(u1);
-
-                        GraphElem f0_local = f0 - e0;
-
-                        graph->sort_edges_by_community_ids(u0, u1, f0, f1, f0_local, g); 
-
-                        graph->louvain_update(u0, u1, f0, f1, f0_local, g);
-                       
+                        graph->update_community_weights(batch, g);
                         CudaDeviceSynchronize();
-                        #pragma omp barrier
-
-                        #pragma omp critical
-                        {
-                            graph->update_community_weights(u0, u1, f0, f1, g);
-                            CudaDeviceSynchronize();
-                        }
-
-                        graph->update_community_ids(u0, u1, f0, f1, g);
-                        CudaDeviceSynchronize();
-                        #pragma omp barrier
                     }
+
+                    graph->update_community_ids(batch, g);
+                    CudaDeviceSynchronize();
+                    #pragma omp barrier
                 }
             }
             Float Qtmp = graph->compute_modularity();

@@ -26,23 +26,22 @@ __device__ GraphElem2 search_ranges(GraphElem* ranges, const GraphElem& i)
 {
     int a = 0;
     int b = NGPU;
-
     int c;
     while(a < b)
     {
         c = (a+b)/2;
-        if(ranges[c] <= i)
+        if(ranges[c+1] <= i)
             a = c;
-        else if(ranges[c] > i and ranges[c-1] > i)
+        else if(ranges[c] > i)
             b = c;
         else
             break;
     }
-    GraphElem start = ranges[c-1];
+    GraphElem start = ranges[c];
     #ifdef USE_32BIT_GRAPH  
-    return make_int2(c-1, i-start);
+    return make_int2(c, i-start);
     #else
-    return make_longlong2(c-1,i-start);
+    return make_longlong2(c,i-start);
     #endif
 }
 

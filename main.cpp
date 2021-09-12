@@ -27,12 +27,22 @@ int main(int argc, char** argv)
         graph = new Graph(std::string(argv[2]));
         pos = 2;
     }
+    else
+        exit(-1);
+    int part_on_device = 1;
+    int part_on_batch = 1;
+    if(std::string(argv[pos+1]) == "-p")
+    {
+        part_on_device = atoi(argv[pos+2]);
+        part_on_batch = atoi(argv[pos+3]);
+        pos += 3;
+    }
 
     Int maxLoops = (Int)atoll(argv[pos+1]);
     Float tau = (Float)atof(argv[pos+2]);
     int nbatches = atoi(argv[pos+3]);
 
-    GraphGPU* graph_gpu = new GraphGPU(graph, nbatches);
+    GraphGPU* graph_gpu = new GraphGPU(graph, nbatches, part_on_device, part_on_batch);
     LouvainGPU* louvain = new LouvainGPU(maxLoops, tau, nbatches);
 
     louvain->run(graph_gpu);

@@ -27,8 +27,9 @@ void LouvainGPU::run(GraphGPU* graph)
         //std::cout << "----------------------------------------\n";
 
         graph->singleton_partition();
+        
         Float Q = graph->compute_modularity();
-
+       
         #ifdef PRINT
         std::cout << "LOOP# \tQ \t\tdQ\n";
         std::cout << "----------------------------------------\n";

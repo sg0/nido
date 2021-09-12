@@ -11,12 +11,9 @@
 #include "graph.hpp"
 #include "cuda_wrapper.hpp"
 
-//#ifdef CHECK
-//#include "graph_cpu.hpp"
-//#endif
-
-GraphGPU::GraphGPU(Graph* graph, const int& nbatches) : 
-graph_(graph), nbatches_(nbatches),NV_(0), NE_(0), maxOrder_(0), mass_(0)
+GraphGPU::GraphGPU(Graph* graph, const int& nbatches, const int& part_on_device, const int& part_on_batch) : 
+graph_(graph), nbatches_(nbatches), part_on_device_(part_on_device), part_on_batch_(part_on_batch), 
+NV_(0), NE_(0), maxOrder_(0), mass_(0)
 {
     NV_ = graph_->get_num_vertices();
     NE_ = graph_->get_num_edges();
@@ -100,7 +97,7 @@ graph_(graph), nbatches_(nbatches),NV_(0), NE_(0), maxOrder_(0), mass_(0)
         CudaSetDevice(i);
         for(int j = 0; j < NGPU; ++j)
         {
-            if(i != j)
+           if(i != j)
                 CudaCall(cudaDeviceEnablePeerAccess(j, 0));
         }
         CudaMemcpyHtoD(commIdsPtr_[i],     commIds_,     sizeof(GraphElem*)*NGPU);
@@ -108,7 +105,32 @@ graph_(graph), nbatches_(nbatches),NV_(0), NE_(0), maxOrder_(0), mass_(0)
     }
 
     partition_graph_edge_batch();
-
+/*
+    std::cout << "total V: " << NV_ << " total E: " << NE_ << std::endl;
+    for(int i = 0; i < NGPU; ++i)
+    {
+        std::cout << nv_[i] << " " << ne_[i] << " " << ne_per_partition_[i] << std::endl;
+    }
+    for(int i = 0; i <= NGPU; ++i)
+        std::cout << i << " " << vertex_per_device_host_[i] << std::endl;
+    std::cout << std::endl;
+    for(int i = 0; i < NGPU; ++i)
+    {
+        for(int j = 0; j < nbatches_+1; ++j)
+            std::cout << vertex_per_batch_[i][j] << std::endl;
+        std::cout << std::endl;
+    }
+    for(int i = 0; i < NGPU; ++i)
+    {
+        for(int j = 0; j < nbatches_; ++j)
+        {
+            std::vector<GraphElem>& vec = vertex_per_batch_partition_[i][j];
+            for(int k = 0; k < vec.size(); ++k)
+                 std::cout << vertex_per_batch_partition_[i][j][k] << std::endl;
+        }
+        std::cout << std::endl;
+    }*/
+    //exit(-1);
     //maxPartitions_ = vertex_partition_[0].size();
     //ne_per_partition_cap_ = ne_per_partition_[0];
 /*
@@ -159,32 +181,48 @@ GraphGPU::~GraphGPU()
 
 void GraphGPU::determine_edge_device_partition()
 {
-    GraphElem ave_ne = NE_/NGPU;
-    GraphElem start = 0;
     std::vector<GraphElem> vertex_parts;
-    vertex_parts.push_back(start);
-    for(GraphElem i = 1; i < NV_; ++i)
-    {
-        if(indicesHost_[i]-indicesHost_[start] > ave_ne)
-        {
-            vertex_parts.push_back(i-1);
-            start = indicesHost_[i-1];
-            i--;
-        }
-    }
-    vertex_parts.push_back(NV_);
+    vertex_parts.push_back(0);
 
-    if(vertex_parts.size()>NGPU+1)
+    if(!part_on_device_)
     {
-        GraphElem remain = NV_ - vertex_parts[NGPU];
-        GraphElem nv = remain/NGPU;
-        for(GraphElem i = 1; i < NGPU; ++i)
-            vertex_parts[i] += nv;
-        vertex_parts[NGPU] = NV_;
+        GraphElem ave_nv = NV_/NGPU;
+        for(int i = 1; i < NGPU; ++i)
+            vertex_parts.push_back(i*ave_nv);
+        vertex_parts.push_back(NV_);
+    }
+    else
+    {
+        GraphElem start = 0;
+        GraphElem ave_ne = NE_/NGPU;
+        for(GraphElem i = 1; i < NV_; ++i)
+        { 
+            if(indicesHost_[i]-indicesHost_[start] > ave_ne)
+            {
+                vertex_parts.push_back(i-1);
+                start = i-1;
+                i--;
+            }
+        }
+        vertex_parts.push_back(NV_);
+
+        if(vertex_parts.size() > NGPU+1)
+        {
+            GraphElem remain = NV_ - vertex_parts[NGPU];
+            GraphElem nv = remain/NGPU;
+            for(GraphElem i = 1; i < NGPU; ++i)
+                vertex_parts[i] += nv;
+            vertex_parts[NGPU] = NV_;
+        }
+        else if(vertex_parts.size() < NGPU+1)
+        {
+            for(int i = vertex_parts.size(); i < NGPU+1; ++i)
+                vertex_parts.push_back(NV_);
+        }
     }
     for(int i = 0; i <= NGPU; ++i)
         vertex_per_device_host_[i] = vertex_parts[i];
- 
+
     for(GraphElem id = 0; id < NGPU; ++id)
     {
         v_base_[id] = vertex_parts[id+0];
@@ -202,48 +240,63 @@ void GraphGPU::partition_graph_edge_batch()
 { 
     for(int g= 0; g < NGPU; ++g)
     {
+        GraphElem nv = nv_[g]; 
         GraphElem ne = ne_[g];
-        GraphElem ave_ne = ne / nbatches_;
-          
-        if(ave_ne == 0)
-        {
-            std::cout << "Too many batches\n";
-            exit(-1); 
-        }
-
-        GraphElem nv = nv_[g];
         std::vector<GraphElem> vertex_parts;
 
-        GraphElem V0 = v_base_[g];
-        vertex_parts.push_back(V0);
-
-        GraphElem start = V0;
-        for(GraphElem i = 1; i < nv; ++i)
+        if(!part_on_batch_)
         {
-            if(indicesHost_[i+V0]-indicesHost_[start] >= ave_ne)
+            vertex_parts.resize(nbatches_+1);
+            GraphElem ave_nv = (nv+nbatches_-1) / nbatches_;
+            for(int i = 0; i < nbatches_; ++i)
             {
-                vertex_parts.push_back(i+V0);
-                start = i+V0;
+                vertex_parts[i] = (GraphElem)i*ave_nv;
+                if(vertex_parts[i] > nv)
+                    vertex_parts[i] = nv;
             }
+            vertex_parts[nbatches_] = nv; 
         }
-        vertex_parts.push_back(v_end_[g]);
+        else
+        {
+            GraphElem ave_ne = ne / nbatches_;
+            if(ave_ne == 0)
+            {
+                std::cout << "Too many batches\n";
+                exit(-1); 
+            }
 
-        if(vertex_parts.size() > nbatches_+1)
-        {
-            GraphElem remain = v_end_[g] - vertex_parts[nbatches_];
-            GraphElem nnv = remain/nbatches_;
-            for(int i = 1; i < nbatches_; ++i)
-                vertex_parts[i] += nnv;
-            vertex_parts[nbatches_] = v_end_[g];
-        }
-        else if(vertex_parts.size() < nbatches_+1) 
-        {
-            for(int i = vertex_parts.size(); i < nbatches_+1; ++i)
-                vertex_parts.push_back(v_end_[g]);
+            GraphElem V0 = v_base_[g];
+            vertex_parts.push_back(V0);
+
+            GraphElem start = V0;
+            for(GraphElem i = 1; i < nv; ++i)
+            {
+                if(indicesHost_[i+V0]-indicesHost_[start] >= ave_ne)
+                {
+                    vertex_parts.push_back(i+V0);
+                    start = i+V0;
+                    //i--;
+                }
+            }
+            vertex_parts.push_back(v_end_[g]);
+
+            if(vertex_parts.size() > nbatches_+1)
+            {
+                GraphElem remain = v_end_[g] - vertex_parts[nbatches_];
+                GraphElem nnv = remain/nbatches_;
+                for(int i = 1; i < nbatches_; ++i)
+                    vertex_parts[i] += nnv;
+                vertex_parts[nbatches_] = v_end_[g];
+            }
+            else if(vertex_parts.size() < nbatches_+1) 
+            {
+                for(int i = vertex_parts.size(); i < nbatches_+1; ++i)
+                    vertex_parts.push_back(v_end_[g]);
+            }
         }
         for(int i = 0; i < nbatches_+1; ++i)
             vertex_per_batch_[g][i] = vertex_parts[i];
-    
+  
         for(int b = 0; b < nbatches_; ++b)
         {
             GraphElem v0 = vertex_per_batch_[g][b+0];
@@ -282,8 +335,13 @@ GraphElem GraphGPU::determine_optimal_edges_per_partition
         float occ_m = (uint64_t)((4*sizeof(GraphElem)+2*sizeof(GraphWeight))*nv)/1048576.0;
         free_m =(uint64_t)free_t/1048576.0 - occ_m;
 
-        GraphElem ne_per_partition = (GraphElem)(free_m / unit_size / 10. * 1048576.0); //8 is the minimum, i chose 10 
+        GraphElem ne_per_partition = (GraphElem)(free_m / unit_size / 10. * 1048576.0); //8 is the minimum, i chose 10
+        #ifdef debug
+        return ((ne_per_partition > ne) ? ne/16 : ne_per_partition);
+        #else 
         return ((ne_per_partition > ne) ? ne : ne_per_partition);
+        //return ne/16;
+        #endif
     }
     return 0;
 }
@@ -351,8 +409,8 @@ void GraphGPU::sort_edges_by_community_ids
         GraphElem ne = e1-e0;
         GraphElem V0 = v_base_[host_id];
 
-        GraphElem e0_local = v0 - e0_[host_id];
-        GraphElem w0_local = v0 - w0_[host_id]; 
+        GraphElem e0_local = e0 - e0_[host_id];
+        GraphElem w0_local = e0 - w0_[host_id]; 
    
         fill_index_orders_cuda(indexOrders_[host_id], indices_[host_id], v0, v1, e0, e1, V0, cuStreams[host_id][0]);
 
@@ -368,7 +426,7 @@ void GraphGPU::sort_edges_by_community_ids
         (GraphElem*)commIdKeys_[host_id], v0, v1,  e0, e1, V0, cuStreams[host_id][0]);
 
         reorder_weights_by_keys_cuda(edgeWeights_[host_id]+w0_local, indexOrders_[host_id], indices_[host_id], 
-        (GraphWeight*)(((GraphElem*)commIdKeys_[host_id])+ne), v0, v1,  e0, e1, V0, cuStreams[host_id][1]);
+        (GraphWeight*)(((GraphElem*)commIdKeys_[host_id])+ne), v0, v1,  e0, e1, V0, 0);//cuStreams[host_id][1]);
 
         //build_local_commid_offsets_cuda(((GraphElem*)commIdKeys_[host_id]), ((GraphElem*)commIdKeys_[host_id])+ne, 
         //edges_[host_id]+e0_local, indices_[host_id], commIdsPtr_[host_id], v0, v1, e0, e1, V0, nv_per_device_);
@@ -378,10 +436,13 @@ void GraphGPU::sort_edges_by_community_ids
 void GraphGPU::singleton_partition()
 {
     omp_set_num_threads(NGPU);
+    //std::cout << NGPU << std::endl;
     #pragma omp parallel
     //for(int i = 0; i < NGPU; ++i)
     {
+        //std::cout << omp_get_num_threads() << std::endl;
         int i = omp_get_thread_num() % NGPU;
+        //std::cout << i << std::endl;
         GraphElem V0 = v_base_[i];
         CudaSetDevice(i);
         if(nv_[i] > 0)
@@ -417,7 +478,7 @@ void GraphGPU::sum_vertex_weights(const int& host_id)
     GraphElem V0 = v_base_[host_id];
     for(GraphElem b = 0; b < vertex_partition_[host_id].size()-1; ++b)
     {
-        GraphElem v0 = vertex_partition_[host_id][b];
+        GraphElem v0 = vertex_partition_[host_id][b+0];
         GraphElem v1 = vertex_partition_[host_id][b+1];
 
 
@@ -456,11 +517,11 @@ void GraphGPU::louvain_update
 
 void GraphGPU::louvain_update
 (
-    const int& b, 
+    const int& bb, 
     const int& host_id
 )
 {
-    const std::vector<GraphElem>& batch = vertex_per_batch_partition_[host_id][b];
+    const std::vector<GraphElem>& batch = vertex_per_batch_partition_[host_id][bb];
     for(int b = 0; b < batch.size()-1; ++b)
     {
         GraphElem v0 = batch[b+0];
@@ -468,7 +529,8 @@ void GraphGPU::louvain_update
         GraphElem e0 = indicesHost_[v0];
         GraphElem e1 = indicesHost_[v1];
         move_edges_to_device(e0, e1, host_id, cuStreams[host_id][0]);
-        move_weights_to_device(e0, e1, host_id);
+        move_weights_to_device(e0, e1, host_id, cuStreams[host_id][1]);
+        CudaDeviceSynchronize();
         sort_edges_by_community_ids(v0, v1, e0, e1, host_id);
         louvain_update(v0, v1, e0, e1, host_id);
     }
@@ -589,7 +651,7 @@ GraphWeight GraphGPU::compute_modularity()
         CudaMalloc(mod,    sizeof(GraphWeight)*num);
         CudaMemset(mod, 0, sizeof(GraphWeight)*num);
         GraphElem V0 = v_base_[id];
-
+        //std::cout << vertex_partition_[id].size()-1 << std::endl;
         for(GraphElem b = 0; b < vertex_partition_[id].size()-1; ++b)
         {
             GraphElem v0 = vertex_partition_[id][b];
@@ -599,11 +661,12 @@ GraphWeight GraphGPU::compute_modularity()
             GraphElem e1 = indicesHost_[v1];
             //GraphElem ne = e1-e0;
 
-            move_edges_to_device(e0, e1, id, cuStreams[id][1]);
-
-            move_weights_to_device(e0, e1, id, cuStreams[id][2]);
-
+            move_edges_to_device(e0, e1, id, cuStreams[id][0]);
+            
+            move_weights_to_device(e0, e1, id, cuStreams[id][1]);
+            CudaDeviceSynchronize(); 
             sort_edges_by_community_ids(v0, v1, e0, e1, id);
+            
             if(v1 > v0)      
                 compute_modularity_reduce_cuda<BLOCKDIM02, WARPSIZE>(mod, edges_[id], edgeWeights_[id], indices_[id], 
                 //commIds_[id], commIdsPtr_[id], commWeightsPtr_[id], ((GraphElem*)commIdKeys_[id]), ((GraphElem*)commIdKeys_[id])+ne, 
@@ -885,7 +948,11 @@ void GraphGPU::compress_all_edges()
     sortedIndicesHost_[0] = 0;
     std::partial_sum(numEdgesHost_, numEdgesHost_+NV_, sortedIndicesHost_+1);
 
-    NE_ = indicesHost_[NV_];
+    //std::cout << NE_ << std::endl;
+    //std::cout <<  sortedIndicesHost_[NV_] << " " << indicesHost_[NV_] << std::endl;
+    //NE_ = indicesHost_[NV_];
+    NE_ = sortedIndicesHost_[NV_];
+    //std::cout << NE_ << std::endl;
 
     GraphElem* bufferEdges = (GraphElem*)buffer_;
 
@@ -921,6 +988,7 @@ void GraphGPU::compress_all_edges()
     #pragma omp parallel for
     for(Int i = 0; i < NV_+1; ++i)
         indicesHost_[i] = sortedIndicesHost_[i];
+    
 }
 
 bool GraphGPU::aggregation()
@@ -948,6 +1016,7 @@ bool GraphGPU::aggregation()
 
     compress_all_edges();
 
+    //std::cout << "my ne " << indicesHost_[NV_] << std::endl;
     GraphElem old_nv[NGPU];
     GraphElem old_ne[NGPU];
 
@@ -1028,7 +1097,7 @@ bool GraphGPU::aggregation()
     //if(maxOrder_ > ne_per_partition_cap_)
     //    std::cerr << "WARNING: Max order may exceed buffer size !!!" << std::endl;
     
-    std::cout << "max order is " << maxOrder_ << std::endl;
+    //std::cout << "max order is " << maxOrder_ << std::endl;
     /*for(int i = 0; i < NGPU; ++i)
     {
         if(maxOrder_ > ne_per_partition_[i])
@@ -1046,7 +1115,32 @@ bool GraphGPU::aggregation()
         CudaMemcpyHtoD(commWeightsPtr_[i], commWeights_, sizeof(GraphWeight*)*NGPU);
     }
     partition_graph_edge_batch();
-
+/*
+    std::cout << "total V: " << NV_ << " total E: " << NE_ << std::endl;
+    for(int i = 0; i < NGPU; ++i)
+    {
+        std::cout << nv_[i] << " " << ne_[i] << " " << ne_per_partition_[i] << std::endl;
+    }
+    for(int i = 0; i <= NGPU; ++i)
+        std::cout << i << " " << vertex_per_device_host_[i] << std::endl;
+    std::cout << std::endl;
+    for(int i = 0; i < NGPU; ++i)
+    {
+        for(int j = 0; j < nbatches_+1; ++j)
+            std::cout << vertex_per_batch_[i][j] << std::endl;
+        std::cout << std::endl;
+    }
+    for(int i = 0; i < NGPU; ++i)
+    {
+        for(int j = 0; j < nbatches_; ++j)
+        {
+            std::vector<GraphElem>& vec = vertex_per_batch_partition_[i][j];
+            for(int k = 0; k < vec.size(); ++k)
+                 std::cout << vertex_per_batch_partition_[i][j][k] << std::endl;
+        }
+        std::cout << std::endl;
+    }
+*/
     return false;
 }
 

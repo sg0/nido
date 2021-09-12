@@ -9,9 +9,6 @@
 #ifdef MULTIPHASE
 #include "clustering.hpp"
 #endif
-//#ifndef NGPU
-//#define NGPU 1
-//#endif
 
 //all indices are stored in global index
 class GraphGPU
@@ -22,14 +19,15 @@ class GraphGPU
 
     GraphElem NV_, NE_;
     int nbatches_;
+    int part_on_device_, part_on_batch_; //use edge-wise partition 1: yes 0: no
 
-    GraphElem nv_[NGPU], ne_[NGPU], ne_per_partition_[NGPU];
+    GraphElem nv_[NGPU], ne_[NGPU], ne_per_partition_[NGPU]; //maximum number of edges to fit on gpu
 
-    GraphElem vertex_per_device_host_[NGPU+1];
-    GraphElem *vertex_per_device_[NGPU];
-    GraphElem *vertex_per_batch_[NGPU];
+    GraphElem vertex_per_device_host_[NGPU+1]; //subgraph vertex range on each device, allocated on host 
+    GraphElem *vertex_per_device_[NGPU]; //subgraph vertex range on each device, allocated on devices
+    GraphElem *vertex_per_batch_[NGPU];  //divide full vertex range into batches (batched update)
 
-    std::vector<std::vector<GraphElem> > vertex_per_batch_partition_[NGPU];
+    std::vector< std::vector<GraphElem> > vertex_per_batch_partition_[NGPU]; //divide batched vertex ranges (batched update) into maximum-edge partition
 
     GraphElem   *edges_[NGPU];
     GraphWeight *edgeWeights_[NGPU];
@@ -54,8 +52,8 @@ class GraphGPU
     GraphElem maxOrder_;
     GraphWeight mass_;
 
-    GraphElem* indicesHost_;
-    GraphElem* edgesHost_;
+    GraphElem*   indicesHost_;
+    GraphElem*   edgesHost_;
     GraphWeight* edgeWeightsHost_;
 
     std::vector<GraphElem> vertex_partition_[NGPU];
@@ -159,7 +157,7 @@ class GraphGPU
     );
 
   public:
-    GraphGPU (Graph* graph, const int& nbatches);
+    GraphGPU (Graph* graph, const int& nbatches, const int& part_on_deivce, const int& part_on_batch);
     ~GraphGPU();
 
     void set_communtiy_ids(GraphElem* commIds);

@@ -445,7 +445,7 @@ void GraphGPU::compute_mass()
             mass_ += m;
         }
     }
-    //std::cout << mass_ << std::endl;
+    std::cout << mass_ << std::endl;
 }
 
 GraphWeight GraphGPU::compute_modularity()
@@ -751,7 +751,8 @@ void GraphGPU::compress_all_edges()
     sortedIndicesHost_[0] = 0;
     std::partial_sum(numEdgesHost_, numEdgesHost_+NV_, sortedIndicesHost_+1);
 
-    NE_ = indicesHost_[NV_];
+    //NE_ = indicesHost_[NV_];
+    NE_ = sortedIndicesHost_[NV_];
 
     GraphElem* bufferEdges = (GraphElem*)buffer_;
 

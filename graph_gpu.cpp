@@ -759,6 +759,7 @@ void GraphGPU::move_weights_to_host
 }
 
 #ifdef MULTIPHASE
+/*
 void GraphGPU::shuffle_edge_list()
 {
     //update new ne
@@ -771,6 +772,66 @@ void GraphGPU::shuffle_edge_list()
     {
         GraphElem pos = vertexIdsHost_[i];
     
+        GraphElem start  = indicesHost_ [pos];
+        GraphElem start0 = sortedIndicesHost_[i+0];
+        GraphElem num    = sortedIndicesHost_[i+1]-start0;
+        for(GraphElem j = 0; j < num; ++j)
+            bufferEdges[j+start0] = edgesHost_[start+j];
+    }
+    #pragma omp parallel for
+    for(Int i = 0; i < NE_; ++i)
+        edgesHost_[i] = bufferEdges[i];
+
+    GraphWeight* bufferWeights = (GraphWeight*)buffer_;
+    #pragma omp parallel for
+    for(Int i = 0; i < NV_; ++i)
+    {
+        GraphElem pos = vertexIdsHost_[i];
+
+        GraphElem start  = indicesHost_ [pos];
+        GraphElem start0 = sortedIndicesHost_[i+0];
+        GraphElem num    = sortedIndicesHost_[i+1]-start0;
+        for(GraphElem j = 0; j < num; ++j)
+            bufferWeights[start0+j] = edgeWeightsHost_[start+j];
+
+    }
+
+    #pragma omp parallel for
+    for(Int i = 0; i < NE_; ++i)
+        edgeWeightsHost_[i] = bufferWeights[i];
+}
+*/
+
+void GraphGPU::shuffle_edge_list()
+{
+    omp_set_num_threads(omp_get_max_threads());
+    /*#pragma omp parallel for 
+    for(GraphElem i = 0; i < NV_; ++i)
+    {
+        GraphElem start = indicesHost_[i+0];
+        GraphElem end   = indicesHost_[i+1];
+
+        sortedIndicesHost_[i] = end-start; //edge_map.size();
+    }*/
+
+    #pragma omp parallel for 
+    for(GraphElem i = 0; i < NV_; ++i)
+    {
+        GraphElem pos = vertexIdsHost_[i]; 
+        //numEdgesHost_[i] = sortedIndicesHost_[pos];
+        numEdgesHost_[i] = indicesHost_[pos+1]-indicesHost_[pos+0];
+    }
+    sortedIndicesHost_[0] = 0;
+    std::partial_sum(numEdgesHost_, numEdgesHost_+NV_, sortedIndicesHost_+1);
+
+    GraphElem* bufferEdges = (GraphElem*)buffer_;
+
+    omp_set_num_threads(omp_get_max_threads());
+    #pragma omp parallel for
+    for(Int i = 0; i < NV_; ++i)
+    {
+        GraphElem pos = vertexIdsHost_[i];
+
         GraphElem start  = indicesHost_ [pos];
         GraphElem start0 = sortedIndicesHost_[i+0];
         GraphElem num    = sortedIndicesHost_[i+1]-start0;
@@ -899,22 +960,53 @@ void GraphGPU::compress_edges()
                 pos++;
             }
         }
-        sortedIndicesHost_[i] = pos; //edge_map.size();
+        numEdgesHost_[i] = pos; //edge_map.size();
+    }
+
+    sortedIndicesHost_[0] = 0;
+    std::partial_sum(numEdgesHost_, numEdgesHost_+NV_, sortedIndicesHost_+1);
+    //update number of edges    
+    NE_ = sortedIndicesHost_[NV_]; 
+
+    GraphElem* bufferEdges = (GraphElem*)buffer_;
+
+    omp_set_num_threads(omp_get_max_threads());
+    #pragma omp parallel for
+    for(Int i = 0; i < NV_; ++i)
+    {
+        GraphElem start  = indicesHost_[i];
+        GraphElem start0 = sortedIndicesHost_[i+0];
+        GraphElem num    = sortedIndicesHost_[i+1]-start0;
+        for(GraphElem j = 0; j < num; ++j)
+            bufferEdges[j+start0] = edgesHost_[start+j];
+    }
+    #pragma omp parallel for
+    for(Int i = 0; i < NE_; ++i)
+        edgesHost_[i] = bufferEdges[i];
+
+    GraphWeight* bufferWeights = (GraphWeight*)buffer_;
+    #pragma omp parallel for
+    for(Int i = 0; i < NV_; ++i)
+    {
+        GraphElem start  = indicesHost_[i];
+        GraphElem start0 = sortedIndicesHost_[i+0];
+        GraphElem num    = sortedIndicesHost_[i+1]-start0;
+        for(GraphElem j = 0; j < num; ++j)
+            bufferWeights[start0+j] = edgeWeightsHost_[start+j];
     }
 
     #pragma omp parallel for
-    for(GraphElem i = 0; i < NV_; ++i)
-    {
-        GraphElem pos = vertexIdsHost_[i];
-        numEdgesHost_[i] = sortedIndicesHost_[pos];
-    }
-    sortedIndicesHost_[0] = 0;
-    std::partial_sum(numEdgesHost_, numEdgesHost_+NV_, sortedIndicesHost_+1);
+    for(Int i = 0; i < NE_; ++i)
+        edgeWeightsHost_[i] = bufferWeights[i];
+
+    #pragma omp parallel for
+    for(Int i = 0; i < NV_+1; ++i)
+        indicesHost_[i] = sortedIndicesHost_[i];
 
     //for(GraphElem i = 0; i < NV_; ++i)
     //    std::cout << sortedIndicesHost_[i] << " " << sortedIndicesHost_[i+1] << std::endl;
 }
-
+/*
 void GraphGPU::compress_all_edges()
 {
     omp_set_num_threads(omp_get_max_threads());
@@ -990,7 +1082,7 @@ void GraphGPU::compress_all_edges()
         indicesHost_[i] = sortedIndicesHost_[i];
     
 }
-
+*/
 bool GraphGPU::aggregation()
 {
     numEdgesHost_      =  (GraphElem*)sortedVertexIdsHost_;
@@ -1003,18 +1095,26 @@ bool GraphGPU::aggregation()
     if(newNv == NV_ || newNv == 1)
         return true;
 
-    compress_edges();
-
     shuffle_edge_list();
-
+    
     NV_ = newNv;
-
     omp_set_num_threads(omp_get_max_threads());
     #pragma omp parallel for
     for(GraphElem i = 0; i < NV_; ++i)
         indicesHost_[i+1] = sortedIndicesHost_[vertexIdsOffsetHost_[i]];
 
-    compress_all_edges();
+    compress_edges();
+
+    //shuffle_edge_list();
+
+/*    NV_ = newNv;
+
+    omp_set_num_threads(omp_get_max_threads());
+    #pragma omp parallel for
+    for(GraphElem i = 0; i < NV_; ++i)
+        indicesHost_[i+1] = sortedIndicesHost_[vertexIdsOffsetHost_[i]];
+*/
+    //compress_all_edges();
 
     //std::cout << "my ne " << indicesHost_[NV_] << std::endl;
     GraphElem old_nv[NGPU];
@@ -1121,6 +1221,7 @@ bool GraphGPU::aggregation()
     {
         std::cout << nv_[i] << " " << ne_[i] << " " << ne_per_partition_[i] << std::endl;
     }
+
     for(int i = 0; i <= NGPU; ++i)
         std::cout << i << " " << vertex_per_device_host_[i] << std::endl;
     std::cout << std::endl;

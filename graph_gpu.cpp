@@ -199,9 +199,17 @@ void GraphGPU::determine_edge_device_partition()
         { 
             if(indicesHost_[i]-indicesHost_[start] > ave_ne)
             {
-                vertex_parts.push_back(i-1);
-                start = i-1;
-                i--;
+                if(i-start <= 1)
+                {
+                    vertex_parts.push_back(i);
+                    start = i;
+                }
+                else
+                {
+                    vertex_parts.push_back(i-1);
+                    start = i-1;
+                    i--;
+                }
             }
         }
         vertex_parts.push_back(NV_);
@@ -271,11 +279,10 @@ void GraphGPU::partition_graph_edge_batch()
             GraphElem start = V0;
             for(GraphElem i = 1; i < nv; ++i)
             {
-                if(indicesHost_[i+V0]-indicesHost_[start] >= ave_ne)
+                if(indicesHost_[i+V0]-indicesHost_[start] > ave_ne)
                 {
                     vertex_parts.push_back(i+V0);
                     start = i+V0;
-                    //i--;
                 }
             }
             vertex_parts.push_back(v_end_[g]);

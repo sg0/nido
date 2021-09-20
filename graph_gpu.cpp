@@ -105,8 +105,8 @@ NV_(0), NE_(0), maxOrder_(0), mass_(0)
     }
 
     partition_graph_edge_batch();
-/*
-    std::cout << "total V: " << NV_ << " total E: " << NE_ << std::endl;
+
+    /*std::cout << "total V: " << NV_ << " total E: " << NE_ << std::endl;
     for(int i = 0; i < NGPU; ++i)
     {
         std::cout << nv_[i] << " " << ne_[i] << " " << ne_per_partition_[i] << std::endl;
@@ -199,17 +199,8 @@ void GraphGPU::determine_edge_device_partition()
         { 
             if(indicesHost_[i]-indicesHost_[start] > ave_ne)
             {
-                if(i-start <= 1)
-                {
-                    vertex_parts.push_back(i);
-                    start = i;
-                }
-                else
-                {
-                    vertex_parts.push_back(i-1);
-                    start = i-1;
-                    i--;
-                }
+                vertex_parts.push_back(i);
+                start = i;
             }
         }
         vertex_parts.push_back(NV_);
@@ -255,7 +246,7 @@ void GraphGPU::partition_graph_edge_batch()
         if(!part_on_batch_)
         {
             vertex_parts.resize(nbatches_+1);
-            GraphElem ave_nv = (nv+nbatches_-1) / nbatches_;
+            GraphElem ave_nv = nv / nbatches_;
             for(int i = 0; i < nbatches_; ++i)
             {
                 vertex_parts[i] = (GraphElem)i*ave_nv;
@@ -308,14 +299,14 @@ void GraphGPU::partition_graph_edge_batch()
         {
             GraphElem v0 = vertex_per_batch_[g][b+0];
             GraphElem v1 = vertex_per_batch_[g][b+1];
-            GraphElem start = indicesHost_[v0];     
+            GraphElem start = v0; 
             vertex_per_batch_partition_[g][b].push_back(v0);
             for(GraphElem i = v0+1; i < v1; ++i)
             {
-                if(indicesHost_[i]-start > ne_per_partition_[g])
+                if(indicesHost_[i]-indicesHost_[start] > ne_per_partition_[g])
                 {
                     vertex_per_batch_partition_[g][b].push_back(i-1);
-                    start = indicesHost_[i-1];
+                    start = i-1;
                     i--;
                 }  
             }
@@ -342,7 +333,8 @@ GraphElem GraphGPU::determine_optimal_edges_per_partition
         float occ_m = (uint64_t)((4*sizeof(GraphElem)+2*sizeof(GraphWeight))*nv)/1048576.0;
         free_m =(uint64_t)free_t/1048576.0 - occ_m;
 
-        GraphElem ne_per_partition = (GraphElem)(free_m / unit_size / 10. * 1048576.0); //8 is the minimum, i chose 10
+        GraphElem ne_per_partition = (GraphElem)(free_m / unit_size / 9 * 1048576.0); //8 is the minimum, i chose 10
+        //std::cout << ne_per_partition << " " << ne << std::endl;
         #ifdef debug
         return ((ne_per_partition > ne) ? ne/16 : ne_per_partition);
         #else 
@@ -435,6 +427,7 @@ void GraphGPU::sort_edges_by_community_ids
         reorder_weights_by_keys_cuda(edgeWeights_[host_id]+w0_local, indexOrders_[host_id], indices_[host_id], 
         (GraphWeight*)(((GraphElem*)commIdKeys_[host_id])+ne), v0, v1,  e0, e1, V0, 0);//cuStreams[host_id][1]);
 
+        //CudaDeviceSynchronize();
         //build_local_commid_offsets_cuda(((GraphElem*)commIdKeys_[host_id]), ((GraphElem*)commIdKeys_[host_id])+ne, 
         //edges_[host_id]+e0_local, indices_[host_id], commIdsPtr_[host_id], v0, v1, e0, e1, V0, nv_per_device_);
     }
@@ -540,6 +533,7 @@ void GraphGPU::louvain_update
         CudaDeviceSynchronize();
         sort_edges_by_community_ids(v0, v1, e0, e1, host_id);
         louvain_update(v0, v1, e0, e1, host_id);
+        //CudaDeviceSynchronize();
     }
 }
 
@@ -679,6 +673,7 @@ GraphWeight GraphGPU::compute_modularity()
                 //commIds_[id], commIdsPtr_[id], commWeightsPtr_[id], ((GraphElem*)commIdKeys_[id]), ((GraphElem*)commIdKeys_[id])+ne, 
                 commIds_[id], commIdsPtr_[id], commWeightsPtr_[id], localOffsets_[id], localCommNums_[id],
                 mass_, v0, v1, e0, e1, V0, vertex_per_device_[id]);
+            //CudaDeviceSynchronize();
         }
         //GraphElem m = MAX_GRIDDIM*BLOCKDIM02/WARPSIZE
         GraphWeight dq = compute_modularity_cuda(mod, num);

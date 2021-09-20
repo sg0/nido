@@ -1,8 +1,8 @@
 NVCC:=nvcc
 CC:=g++
 
-SM=75
-NGPU=1
+SM=70
+NGPU=2
 graph_ft_load=1
 #check=1
 ifeq ($(debug), 1)

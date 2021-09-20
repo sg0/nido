@@ -59,7 +59,7 @@ void LouvainGPU::run(GraphGPU* graph)
                         graph->update_community_weights(batch, g);
                         CudaDeviceSynchronize();
                     }
-                    #pragma omp barrier
+                    //#pragma omp barrier
 
                     graph->update_community_ids(batch, g);
                     CudaDeviceSynchronize();

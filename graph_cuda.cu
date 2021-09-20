@@ -1065,7 +1065,7 @@ void build_local_commid_offsets_kernel
                         break;
                 }
             }
-            ///warp.sync();
+            //warp.sync();
             #pragma unroll
             for(int i = WarpSize/2; i > 0; i/=2)
                 localCount += warp.shfl_down(localCount, i);
@@ -1076,7 +1076,7 @@ void build_local_commid_offsets_kernel
         start = end;
         if(lane_id == 0x00)
             localCommNums[v-v_base] = localId;
-        ///warp.sync();
+        //warp.sync();
     }
 }
 
@@ -1248,7 +1248,7 @@ __global__
 void louvain_update_kernel
 (
     GraphElem*    __restrict__ localCommOffsets,
-    GraphElem*     __restrict__ localCommNums,
+    GraphElem*    __restrict__ localCommNums,
     GraphElem*    __restrict__ edges,
     GraphWeight*  __restrict__ edgeWeights,
     GraphElem*    __restrict__ indices,

@@ -3,7 +3,7 @@ CC:=g++
 
 SM=70
 NGPU=1
-graph_ft_load=1
+graph_ft_load=0
 #check=1
 debug=0
 ifeq ($(debug), 1)
@@ -11,9 +11,9 @@ ifeq ($(debug), 1)
                   -Xcompiler -fopenmp -DMULTIPHASE -DNGPU=1 -DPRINT
 	CFLAGS = -g -Ddebug -std=c++14 -Wextra -Wall -DMULTIPHASE -DNGPU=1 -DPRINT
 else 
-	CUFLAGS = -O3 -Xptxas -O3 --std=c++14 --gpu-architecture=compute_${SM} --gpu-code=sm_${SM},compute_${SM} \
-                  -Xcompiler -O3 -Xcompiler -fopenmp -DMULTIPHASE -DPRINT -DNGPU=${NGPU}
-	CFLAGS = -O3 -std=c++14 -Wextra -Wall -DMULTIPHASE -DPRINT -DNGPU=${NGPU}
+	CUFLAGS = -O3 -Xptxas -O3 --std=c++11 --gpu-architecture=compute_${SM} --gpu-code=sm_${SM},compute_${SM} \
+                  -Xcompiler -O3 -Xcompiler -fopenmp -DMULTIPHASE -DPRINT -DNGPU=${NGPU} -DDUMP
+	CFLAGS = -O3 -std=c++11 -Wextra -Wall -DMULTIPHASE -DPRINT -DNGPU=${NGPU} -DDUMP
 endif
 
 ifeq ($(check),1)

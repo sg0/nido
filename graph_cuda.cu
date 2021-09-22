@@ -1040,7 +1040,7 @@ void build_local_commid_offsets_kernel
         end   = warp.shfl(end, 0);
         
         volatile GraphElem  count = 0;
-        GraphElem2 target;
+        //volatile GraphElem2 target;
         volatile GraphElem  localId = 0;
 
         while(count < end-start)
@@ -1048,7 +1048,7 @@ void build_local_commid_offsets_kernel
             if(lane_id == 0x00)
                 localOffsets[start+localId] = count;
             //GraphElem f = edges[start+count];
-            target = commIdKeys[start+count]; 
+            GraphElem2 target = commIdKeys[start+count]; 
             //target = commIdsPtr[f/nv_per_device][f%nv_per_device];
             //target = f.y;
             volatile unsigned localCount = 0;
@@ -1203,7 +1203,7 @@ void update_community_weights_kernel
     GraphElem*    __restrict__ newCommIds,
     GraphWeight*  __restrict__ vertexWeights,
     const GraphElem nv,
-    GraphElem* vertex_per_device
+    GraphElem* __restrict__ vertex_per_device
 )
 {
     for(GraphElem v = threadIdx.x + BlockSize*blockIdx.x; v < nv; v += BlockSize*gridDim.x)
@@ -1721,14 +1721,15 @@ void compute_modularity_reduce_kernel
         //loop throught unique community ids
         for(GraphElem j = 0; j < localCommNum; ++j)
         {
-            GraphElem n0, n1;
+            GraphElem n0;//, n1;
             n0 = localCommOffsets[j+start]+start;
-            n1 = ((j == localCommNum-1) ? end : localCommOffsets[j+start+1]+start);
+            //n1 = ((j == localCommNum-1) ? end : localCommOffsets[j+start+1]+start);
             GraphElem g = edges[n0];
             GraphElem2 g_id = search_ranges(vertex_per_device, g);
             GraphElem destCommId = commIdsPtr[g_id.x][g_id.y];
             if(destCommId == myCommId)
             {
+                GraphElem n1 = ((j == localCommNum-1) ? end : localCommOffsets[j+start+1]+start); 
                 for(GraphElem k = n0+lane_id; k < n1; k+=WarpSize)
                     selfWeight += edgeWeights[k];
                 for(unsigned int i = WarpSize/2; i > 0; i/=2)

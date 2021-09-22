@@ -230,5 +230,9 @@ class GraphGPU
     bool aggregation();
     void dump_partition(const std::string&);
     #endif
+
+    #ifdef CHECK
+    void louvain_update_host(const int&);
+    #endif
 };
 #endif

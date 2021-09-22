@@ -549,24 +549,139 @@ void GraphGPU::louvain_update
         sort_edges_by_community_ids(v0, v1, e0, e1, host_id);
 
         louvain_update(v0, v1, e0, e1, host_id);
-        #ifdef CHECK
-        louvain_update_host(v0, v1, e0, e1, host_id);
-        #endif 
     }
 }
-/*
+#ifdef CHECK
 void GraphGPU::louvain_update_host
 (
     const int& batch
 )
 {
-    CudaDeviceSynchronize();
+    GraphElem*   commIds         = new GraphElem[NV_];
+    GraphElem*   newCommIds      = new GraphElem[NV_];
+    GraphWeight* ac              = new GraphWeight[NV_];
+    GraphWeight* weighted_orders = new GraphWeight[NV_];
+
+    GraphWeight** e_cj = new GraphWeight* [16];
+    for(int i = 0; i < 16; ++i) 
+        e_cj[i] = new GraphWeight [maxOrder_];
+ 
     for(int g = 0; g < NGPU; ++g)
     {
-        
+        CudaSetDevice(g);
+        CudaMemcpyAsyncDtoH(commIds+v_base_[g], commIds_[g], nv_[g]*sizeof(GraphElem),  cuStreams[g][0]);
+        CudaMemcpyAsyncDtoH(newCommIds+v_base_[g], commIds_[g], nv_[g]*sizeof(GraphElem),  cuStreams[g][1]);   
+        CudaMemcpyAsyncDtoH(ac+v_base_[g], commWeights_[g], nv_[g]*sizeof(GraphWeight), cuStreams[g][2]);
+        CudaMemcpyAsyncDtoH(weighted_orders+v_base_[g], vertexWeights_[g], nv_[g]*sizeof(GraphWeight), cuStreams[g][3]);
+    }
+    for(int g = 0;  g < NGPU; ++g)
+    {
+        CudaSetDevice(g);
+        CudaDeviceSynchronize();
+    }
+
+    for(int g = 0; g < NGPU; ++g)
+    {
+        GraphElem v0 = vertex_per_batch_[g][batch+0];
+        GraphElem v1 = vertex_per_batch_[g][batch+1];
+
+        for(int n = 0; n < 16; ++n)
+            for(GraphElem i = 0; i < maxOrder_; ++i)
+                e_cj[n][i] = 0;
+
+        omp_set_num_threads(16);
+        #pragma omp parallel for
+        for(GraphElem v = v0; v < v1; ++v)
+        {
+            GraphElem   *edges     = edgesHost_+indicesHost_[v];
+            GraphElem    num_edges = indicesHost_[v+1]-indicesHost_[v];
+            GraphWeight *weights   = edgeWeightsHost_+indicesHost_[v];
+            GraphElem my_comm_id = commIds[v];
+            int my_thread_id = omp_get_thread_num();
+
+            //loop through all neighboring clusters
+            GraphElem unique_id = 0;
+            std::unordered_map<GraphElem, GraphElem> neighCommIdMap;
+
+            GraphWeight e_ci = 0.;
+            GraphWeight ki = weighted_orders[v];
+            for(GraphElem j = 0; j < num_edges; ++j)
+            {
+                GraphElem u      = edges[j];
+                GraphWeight w_vu = weights[j];
+
+                //Int comm_id = partition_->get_comm_id(u);
+                GraphElem comm_id = commIds[u];
+                if(comm_id != my_comm_id)
+                {
+                    std::unordered_map<Int,Int>::iterator iter;
+                    if((iter = neighCommIdMap.find(comm_id)) == neighCommIdMap.end())
+                    {
+                        neighCommIdMap.insert({comm_id, unique_id});
+                        e_cj[my_thread_id][unique_id] = w_vu; //graph->get_weight(vi,j);
+                        unique_id++;
+                    }
+                    else
+                        e_cj[my_thread_id][iter->second] += w_vu;
+                }
+                else if(v != u)
+                    e_ci += w_vu;
+            }
+
+            //determine the best move
+            GraphWeight ac_i;
+            ac_i = ac[my_comm_id]-ki;
+
+            GraphWeight delta = 0;
+            GraphElem destCommId = my_comm_id;
+
+            for(auto iter = neighCommIdMap.begin(); iter != neighCommIdMap.end(); ++iter)
+            {
+                GraphWeight val = e_cj[my_thread_id][iter->second];
+                val -= (e_ci - ki*(ac_i-ac[iter->first])/(2.*mass_));
+                val /= mass_;
+                if(val > delta)
+                {
+                    destCommId = iter->first;
+                    delta = val;
+                }
+            }
+            if(destCommId != my_comm_id)
+                newCommIds[v] = destCommId;
+            else 
+                newCommIds[v] = my_comm_id;
+        }
+    }
+    for(int g = 0; g < NGPU; ++g)
+    {
+        CudaSetDevice(g);
+        CudaMemcpyAsyncDtoH(commIds+v_base_[g], newCommIds_[g], nv_[g]*sizeof(GraphElem),  cuStreams[g][0]);
+    }
+    for(int g = 0; g < NGPU; ++g)
+    {
+        CudaSetDevice(g);
+        CudaDeviceSynchronize();
     } 
+    GraphElem count = 0;
+    for(GraphElem i = 0; i < NV_; ++i) 
+    {
+        if(newCommIds[i]!=commIds[i])
+        {
+            count++;
+            //std::cout << i << " " << newCommIds[i] << " " << commIds[i] << std::endl;
+        }
+    }
+    std::cout << count << std::endl;
+    for(int i = 0; i < 16; ++i) 
+        delete e_cj[i];
+    delete e_cj;
+
+    delete [] commIds;
+    delete [] newCommIds;
+    delete [] ac;
 }
-*/
+#endif
+
 void GraphGPU::update_community_weights
 (
     const GraphElem& v0,

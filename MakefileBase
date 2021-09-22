@@ -4,7 +4,7 @@ CC:=g++
 SM=70
 NGPU=1
 graph_ft_load=0
-#check=1
+check=1
 debug=0
 ifeq ($(debug), 1)
 	CUFLAGS = -g -G -Ddebug --std=c++14 --gpu-architecture=compute_${SM} --gpu-code=sm_${SM},compute_${SM} \

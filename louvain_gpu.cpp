@@ -47,13 +47,18 @@ void LouvainGPU::run(GraphGPU* graph)
             {
                 int g =  omp_get_thread_num() % NGPU;
                 CudaSetDevice(g);
-
+            
                 for(int batch = 0; batch < nbatches_; ++batch)
                 {
                     graph->louvain_update(batch, g); 
                     CudaDeviceSynchronize();
                     #pragma omp barrier 
- 
+                    #ifdef CHECK
+                    if(g==0)
+                        graph->louvain_update_host(batch);
+                    #pragma omp barrier
+                    #endif 
+                    
                     #pragma omp critical
                     {
                         graph->update_community_weights(batch, g);

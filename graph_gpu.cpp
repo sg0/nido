@@ -105,8 +105,8 @@ NV_(0), NE_(0), maxOrder_(0), mass_(0)
     }
 
     partition_graph_edge_batch();
-
-    /*std::cout << "total V: " << NV_ << " total E: " << NE_ << std::endl;
+/*
+    std::cout << "total V: " << NV_ << " total E: " << NE_ << std::endl;
     for(int i = 0; i < NGPU; ++i)
     {
         std::cout << nv_[i] << " " << ne_[i] << " " << ne_per_partition_[i] << std::endl;
@@ -126,10 +126,19 @@ NV_(0), NE_(0), maxOrder_(0), mass_(0)
         {
             std::vector<GraphElem>& vec = vertex_per_batch_partition_[i][j];
             for(int k = 0; k < vec.size(); ++k)
-                 std::cout << vertex_per_batch_partition_[i][j][k] << std::endl;
+            {
+                 GraphElem id = vertex_per_batch_partition_[i][j][k];
+                 std::cout << id << " " << indicesHost_[id] << std::endl;
+            } 
         }
         std::cout << std::endl;
-    }*/
+    }
+    for(int i = 0; i < NGPU; ++i)
+    {
+        for(int j = 0; j < vertex_partition_[i].size(); ++j)
+            std::cout << vertex_partition_[i][j] << std::endl;
+        std::cout << std::endl;
+    }*/ 
     //exit(-1);
     //maxPartitions_ = vertex_partition_[0].size();
     //ne_per_partition_cap_ = ne_per_partition_[0];
@@ -195,15 +204,16 @@ void GraphGPU::determine_edge_device_partition()
     {
         GraphElem start = 0;
         GraphElem ave_ne = NE_/NGPU;
-        for(GraphElem i = 1; i < NV_; ++i)
+        for(GraphElem i = 1; i <= NV_; ++i)
         { 
             if(indicesHost_[i]-indicesHost_[start] > ave_ne)
             {
                 vertex_parts.push_back(i);
                 start = i;
             }
+            else if (i == NV_)
+                vertex_parts.push_back(NV_);
         }
-        vertex_parts.push_back(NV_);
 
         if(vertex_parts.size() > NGPU+1)
         {
@@ -268,15 +278,16 @@ void GraphGPU::partition_graph_edge_batch()
             vertex_parts.push_back(V0);
 
             GraphElem start = V0;
-            for(GraphElem i = 1; i < nv; ++i)
+            for(GraphElem i = 1; i <= nv; ++i)
             {
                 if(indicesHost_[i+V0]-indicesHost_[start] > ave_ne)
                 {
                     vertex_parts.push_back(i+V0);
                     start = i+V0;
                 }
+                else if (i == nv)
+                    vertex_parts.push_back(v_end_[g]);
             }
-            vertex_parts.push_back(v_end_[g]);
 
             if(vertex_parts.size() > nbatches_+1)
             {
@@ -301,7 +312,7 @@ void GraphGPU::partition_graph_edge_batch()
             GraphElem v1 = vertex_per_batch_[g][b+1];
             GraphElem start = v0; 
             vertex_per_batch_partition_[g][b].push_back(v0);
-            for(GraphElem i = v0+1; i < v1; ++i)
+            for(GraphElem i = v0+1; i <= v1; ++i)
             {
                 if(indicesHost_[i]-indicesHost_[start] > ne_per_partition_[g])
                 {
@@ -339,7 +350,7 @@ GraphElem GraphGPU::determine_optimal_edges_per_partition
         return ((ne_per_partition > ne) ? ne/16 : ne_per_partition);
         #else 
         return ((ne_per_partition > ne) ? ne : ne_per_partition);
-        //return ne/16;
+        //return ne/4;
         #endif
     }
     return 0;
@@ -425,7 +436,7 @@ void GraphGPU::sort_edges_by_community_ids
         (GraphElem*)commIdKeys_[host_id], v0, v1,  e0, e1, V0, cuStreams[host_id][0]);
 
         reorder_weights_by_keys_cuda(edgeWeights_[host_id]+w0_local, indexOrders_[host_id], indices_[host_id], 
-        (GraphWeight*)(((GraphElem*)commIdKeys_[host_id])+ne), v0, v1,  e0, e1, V0, 0);//cuStreams[host_id][1]);
+        (GraphWeight*)(((GraphElem*)commIdKeys_[host_id])+ne), v0, v1,  e0, e1, V0, cuStreams[host_id][1]);
 
         //build_local_commid_offsets_cuda(((GraphElem*)commIdKeys_[host_id]), ((GraphElem*)commIdKeys_[host_id])+ne, 
         //edges_[host_id]+e0_local, indices_[host_id], commIdsPtr_[host_id], v0, v1, e0, e1, V0, nv_per_device_);
@@ -529,11 +540,12 @@ void GraphGPU::louvain_update
         GraphElem e0 = indicesHost_[v0];
         GraphElem e1 = indicesHost_[v1];
 
-        move_edges_to_device(e0, e1, host_id, cuStreams[host_id][0]);
-        move_weights_to_device(e0, e1, host_id, cuStreams[host_id][1]);
-        CudaDeviceSynchronize();
+        move_edges_to_device(e0, e1, host_id, cuStreams[host_id][1]);
+
+        move_weights_to_device(e0, e1, host_id, cuStreams[host_id][2]);
 
         sort_edges_by_community_ids(v0, v1, e0, e1, host_id);
+
         louvain_update(v0, v1, e0, e1, host_id);
     }
 }
@@ -662,11 +674,9 @@ GraphWeight GraphGPU::compute_modularity()
             GraphElem e0 = indicesHost_[v0];
             GraphElem e1 = indicesHost_[v1];
             
-            move_edges_to_device(e0, e1, id, cuStreams[id][0]);
+            move_edges_to_device(e0, e1, id, cuStreams[id][1]);
             
-            move_weights_to_device(e0, e1, id, cuStreams[id][1]);
-
-            CudaDeviceSynchronize(); 
+            move_weights_to_device(e0, e1, id, cuStreams[id][2]);
 
             sort_edges_by_community_ids(v0, v1, e0, e1, id);
             

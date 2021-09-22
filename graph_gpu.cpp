@@ -74,6 +74,8 @@ NV_(0), NE_(0), maxOrder_(0), mass_(0)
         keys_ptr[id]   = thrust::device_pointer_cast(commIdKeys_[id]);
 
         sum_vertex_weights(id);
+        CudaDeviceSynchronize();
+
         vertex_per_batch_[id] = new GraphElem [nbatches+1];
         vertex_per_batch_partition_[id].resize(nbatches);
         //CudaDeviceSynchronize();
@@ -547,9 +549,24 @@ void GraphGPU::louvain_update
         sort_edges_by_community_ids(v0, v1, e0, e1, host_id);
 
         louvain_update(v0, v1, e0, e1, host_id);
+        #ifdef CHECK
+        louvain_update_host(v0, v1, e0, e1, host_id);
+        #endif 
     }
 }
-
+/*
+void GraphGPU::louvain_update_host
+(
+    const int& batch
+)
+{
+    CudaDeviceSynchronize();
+    for(int g = 0; g < NGPU; ++g)
+    {
+        
+    } 
+}
+*/
 void GraphGPU::update_community_weights
 (
     const GraphElem& v0,
@@ -1201,6 +1218,7 @@ bool GraphGPU::aggregation()
         vertex_partition_[id].clear();
         determine_optimal_vertex_partition(indicesHost_, nv, ne, ne_per_partition, vertex_partition_[id], v_base_[id]);
         sum_vertex_weights(id);
+        CudaDeviceSynchronize();
 
         for(int b = 0; b < nbatches_; ++b)
             vertex_per_batch_partition_[id][b].clear();

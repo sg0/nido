@@ -1298,10 +1298,10 @@ void louvain_update_kernel
         #else
         target = make_double2(-MAX_FLOAT, __longlong_as_double(0LL));
         #endif
-
+        //warp.sync();
         if(lane_id == 0x00)
             self_shared[warp_id] = 0;
-
+        //warp.sync();
         if(lane_id == 0x00)
             end = indices[v+1-V0]-e_base;
         end = warp.shfl(end, 0);
@@ -1419,7 +1419,7 @@ void louvain_update_cuda
 
     CudaLaunch((louvain_update_kernel<BLOCKDIM03,TILESIZE01,TILESIZE02><<<nblocks, BLOCKDIM03, 0, stream>>>
     (localCommOffsets, localCommNums, edges, edgeWeights, indices, vertexWeights, commIds, commIdsPtr, 
-     commWeightsPtr, newCommIds, mass, v0, e0, v1-v0, V0, vertex_per_device)));
+     commWeightsPtr, newCommIds, mass, v0, e0, nv, V0, vertex_per_device)));
 }
 //#endif
 #if 0

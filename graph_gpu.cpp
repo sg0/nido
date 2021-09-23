@@ -271,11 +271,11 @@ void GraphGPU::partition_graph_edge_batch()
         else
         {
             GraphElem ave_ne = ne / nbatches_;
-            if(ave_ne == 0)
+            /*if(ave_ne == 0)
             {
                 std::cout << "Too many batches\n";
                 exit(-1); 
-            }
+            }*/
 
             vertex_parts.push_back(V0);
 

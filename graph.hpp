@@ -3,7 +3,14 @@
 #include <list>
 #include <string>
 #include "types.hpp"
-
+#ifdef CHECK
+#include <random>
+#ifdef USE_32_BIT_GRAPH
+typedef std::mt19937 Mt19937;
+#else
+typedef std::mt19937_64 Mt19937;
+#endif
+#endif
 class Graph
 {
   private:
@@ -78,6 +85,19 @@ class Graph
     void neigh_scan_weights(const int& num_threads);
     void neigh_scan_max_weight(const int& num_threads);
 
+    #ifdef CHECK
+    void randomize_weights()
+    {
+        //std::random_device dev;
+        Mt19937 rng;
+        //std::default_random_engine rng;
+        std::uniform_real_distribution<GraphWeight> distribution(0.,1.);
+
+        for(GraphElem i = 0; i < totalEdges_; ++i)
+            weights_[i] = distribution(rng);
+    }
+
+    #endif
     //void sort_edges_by_community_ids();    
 };
 #endif

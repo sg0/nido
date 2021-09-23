@@ -140,7 +140,9 @@ indices_(nullptr), totalEdges_(0), edges_(nullptr),
 weights_(nullptr), numColors_(0), colors_(nullptr)
 {
     create_random_network_ba(m0);
-    
+    #ifdef CHECK
+    randomize_weights();
+    #endif    
     weighted_orders_ = new Float [totalVertices_];
     max_weights_ = new Float[totalVertices_];
     orders_  = new Int[totalVertices_];
@@ -474,7 +476,10 @@ numColors_(0), colors_(nullptr)
     neigh_scan_max_order();
     print_stats();
 
-    coloring();
+    #ifdef CHECK
+    randomize_weights();
+    #endif
+    //coloring();
 }
 
 Int* Graph::get_index_ranges()

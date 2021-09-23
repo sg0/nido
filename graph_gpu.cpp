@@ -661,14 +661,17 @@ void GraphGPU::louvain_update_host
     {
         CudaSetDevice(g);
         CudaDeviceSynchronize();
-    } 
+    }
+
     GraphElem count = 0;
-    for(GraphElem i = 0; i < NV_; ++i) 
+    for(int g = 0; g < NGPU; ++g)
     {
-        if(newCommIds[i]!=commIds[i])
+        GraphElem v0 = vertex_per_batch_[g][batch+0];
+        GraphElem v1 = vertex_per_batch_[g][batch+1];
+        for(GraphElem i = v0; i < v1; ++i) 
         {
-            count++;
-            //std::cout << i << " " << newCommIds[i] << " " << commIds[i] << std::endl;
+            if(newCommIds[i]!=commIds[i])
+                count++;
         }
     }
     std::cout << count << std::endl;

@@ -36,7 +36,7 @@ else ifeq ($(bit),64)
 	CFLAGS  += -DUSE_64BIT
 else
 	CUFLAGS += -DUSE_64BIT
-	CFLAGS  += DUSE_64BIT
+	CFLAGS  += -DUSE_64BIT
 endif
 
 EXE:= run_${NGPU}_${SM}

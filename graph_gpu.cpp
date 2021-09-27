@@ -1203,6 +1203,9 @@ void GraphGPU::compress_edges()
 
     sortedIndicesHost_[0] = 0;
     std::partial_sum(numEdgesHost_, numEdgesHost_+NV_, sortedIndicesHost_+1);
+    //std::inclusive_scan(std::execution::par, numEdgesHost_, numEdgesHost_+NV_, sortedIndicesHost_+1);
+    //parallel_inclusive_scan(numEdgesHost_, numEdgesHost_+NV_, sortedIndicesHost_+1);
+ 
     //update number of edges    
     NE_ = sortedIndicesHost_[NV_]; 
 

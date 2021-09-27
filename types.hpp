@@ -21,6 +21,8 @@ using Float2 = double2;
 using UInt = uint64_t;
 #endif
 
+#define MAX_PHASES 200
+
 #ifdef EDGE_AS_VERTEX_PAIR
 struct Edge
 {

@@ -23,7 +23,7 @@ void LouvainGPU::run(GraphGPU* graph)
 
     Int numPhases = 0;
     total_start = omp_get_wtime();
-    while(!done)
+    while(!done && numPhases < MAX_PHASES)
     {
         std::cout << "PHASE #" << numPhases << ": " << std::endl;
         //std::cout << "----------------------------------------\n";
@@ -98,7 +98,6 @@ void LouvainGPU::run(GraphGPU* graph)
             std::cout << "Exceed maximum loop number" << std::endl;
         std::cout << "Final Q: "<< Q << std::endl;
         std::cout << "Time elapse " << end-start << " s" << std::endl;
-        std::cout << "----------------------------------------\n";
 
         loop_time += end-start;
 
@@ -106,10 +105,13 @@ void LouvainGPU::run(GraphGPU* graph)
         double start_agg = omp_get_wtime();
         done = graph->aggregation();
         double end_agg =  omp_get_wtime();
-        std::cout << "Aggregation time " << end_agg-start_agg << " s" << std::endl;
+        double diff = end_agg-start_agg;
+        std::cout << "Aggregation time: " << diff << " s" << std::endl;
+        aggregate_time += diff;
         #else
         done = true;
         #endif
+        std::cout << "----------------------------------------\n";
         numPhases++;
     }
     total_end = omp_get_wtime();
@@ -118,6 +120,7 @@ void LouvainGPU::run(GraphGPU* graph)
     std::cout << "Total Loops: " << totalLoops << "\n";
     std::cout << "Time per loop: " << loop_time/totalLoops << " s/loop\n";
     std::cout << "Aggregation time: " << total_time-loop_time << " s\n";
+    std::cout << "Aggregation time: " << aggregate_time << " s\n";
 
     for(int i = 0; i < NGPU; ++i)
     {

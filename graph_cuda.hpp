@@ -15,7 +15,8 @@ void reorder_weights_by_keys_cuda
 
 void fill_edges_community_ids_cuda
 (
-    GraphElem2* commIdKeys, 
+    GraphElem2* commIdKeys,
+    GraphElem*  localCommNums, 
     GraphElem*  edges,
     GraphElem*  indices,
     GraphElem** commIdsPtr,
@@ -139,25 +140,38 @@ void build_local_commid_offsets_cuda
 
 void louvain_update_cuda
 (
-    GraphElem*    localCommOffsets,
-    GraphElem*    localCommNums,
-    GraphElem*    edges,
-    GraphWeight*  edgeWeights,
-    GraphElem*    indices,
-    GraphWeight*  vertexWeights,
+    GraphElem2*   commIdKeys, 
+    GraphElem*    localCommNums, 
+    GraphWeight*  orderedWeights,
+    GraphWeight*  vertexWeights, 
     GraphElem*    commIds,
-    GraphElem**   commIdsPtr,
-    GraphWeight** commWeightsPtr,
+    GraphWeight** commWeightsPtr, 
     GraphElem*    newCommIds,
-    const GraphWeight& mass,
-    const GraphElem& v0,
-    const GraphElem& v1,
-    const GraphElem& e0,
+    const GraphWeight& mass, 
+    const GraphElem& v0, 
+    const GraphElem& v1, 
+    const GraphElem& e0, 
     const GraphElem& e1,
     const GraphElem& V0,
     GraphElem* vertex_per_device,
     cudaStream_t stream = 0
 );
+
+void copy_weights_cuda
+(
+    GraphWeight* orderedWeights,
+    GraphWeight* edgeWeights,
+    GraphElem*   edges,
+    GraphElem*   indices,
+    const GraphElem& v0,
+    const GraphElem& v1,
+    const GraphElem& e0,
+    const GraphElem& e1,
+    const GraphElem& V0,
+    const int& exclude_self_loops,
+    cudaStream_t stream = 0
+);
+
 /*
 void update_commids_cuda
 (
@@ -197,26 +211,33 @@ GraphWeight compute_mass_cuda
     cudaStream_t stream = 0
 );
 
+template<typename T>
 void copy_vector_cuda
 (
-    GraphElem* dest,
-    GraphElem* src,
+    T* dest,
+    T* src,
     const GraphElem& ne_,
     cudaStream_t stream = 0
+);
+
+void fill_unique_community_counts_cuda
+(
+    GraphElem*  localCommNums,
+    GraphElem2* commIdKeys,
+    const GraphElem& v0,
+    const GraphElem& nv,
+    const cudaStream_t=0
 );
 
 template<const int BlockSize, const int WarpSize>
 void compute_modularity_reduce_cuda
 (
     GraphWeight*  mod,
-    GraphElem*    edges,
-    GraphWeight*  edgeWeights,
-    GraphElem*    indices,
+    GraphElem2*   commIdKeys,
+    GraphElem*    localCommNums,
+    GraphWeight*  reducedWeights,
     GraphElem*    commIds,
-    GraphElem**   commIdsPtr,
     GraphWeight** commWeightsPtr,
-    GraphElem*    localCommOffsets,
-    GraphElem*    localCommNums, 
     const GraphWeight& mass,
     const GraphElem& v0,
     const GraphElem& v1,
@@ -226,6 +247,28 @@ void compute_modularity_reduce_cuda
     GraphElem* vertex_per_device,
     cudaStream_t stream = 0
 );
+
+template<const int BlockSize, const int WarpSize>
+void compute_modularity_reduce_cuda
+(
+    GraphWeight*  mod,
+    GraphElem*    indices,
+    GraphElem*    edges,
+    GraphWeight*  edgeWeights,
+    GraphElem*    commIds,
+    GraphElem**   commIdsPtr,
+    GraphWeight** commWeightsPtr,
+    const GraphWeight& mass,
+    const GraphElem& v0,
+    const GraphElem& v1,
+    const GraphElem& e0,
+    const GraphElem& e1,
+    const GraphElem& V0,
+    GraphElem* vertex_per_device,
+    cudaStream_t stream = 0
+);
+
+
 
 GraphWeight compute_modularity_cuda
 (

@@ -15,7 +15,9 @@ void LouvainGPU::run(GraphGPU* graph)
 
     double total_start, total_end;
     double loop_time = 0;
-
+    #ifdef MULTIPHASE
+    double aggregate_time = 0;
+    #endif
     int totalLoops = 0;
     bool done = false;
 
@@ -27,9 +29,14 @@ void LouvainGPU::run(GraphGPU* graph)
         //std::cout << "----------------------------------------\n";
 
         graph->singleton_partition();
-        
+        #ifdef CHECK
+        graph->set_community_ids();
+        #endif        
         Float Q = graph->compute_modularity();
-       
+        #ifdef CHECK
+        graph->compute_modularity_host();
+        #endif
+
         #ifdef PRINT
         std::cout << "LOOP# \tQ \t\tdQ\n";
         std::cout << "----------------------------------------\n";
@@ -96,8 +103,10 @@ void LouvainGPU::run(GraphGPU* graph)
         loop_time += end-start;
 
         #ifdef MULTIPHASE
+        double start_agg = omp_get_wtime();
         done = graph->aggregation();
-        //std::cout << "done aggregation\n";
+        double end_agg =  omp_get_wtime();
+        std::cout << "Aggregation time " << end_agg-start_agg << " s" << std::endl;
         #else
         done = true;
         #endif
@@ -105,7 +114,8 @@ void LouvainGPU::run(GraphGPU* graph)
     }
     total_end = omp_get_wtime();
     double total_time = (double)(total_end-total_start);
-    std::cout << "Total time elapse " << total_time << " s" << std::endl;
+    std::cout << "Total time elapse: " << total_time << " s" << std::endl;
+    std::cout << "Total Loops: " << totalLoops << "\n";
     std::cout << "Time per loop: " << loop_time/totalLoops << " s/loop\n";
     std::cout << "Aggregation time: " << total_time-loop_time << " s\n";
 

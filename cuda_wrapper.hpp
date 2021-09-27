@@ -121,6 +121,15 @@ struct less_int2
         return (a.x != b.x) ? (a.x < b.x) : (a.y < b.y);
     };
 };
+
+struct equal_int2
+{
+    __host__ __device__ bool operator()(const int2& a, const int2& b)
+    {
+        return (a.x != b.x) ? false : (a.y == b.y);
+    };
+};
+
 #else
 struct less_int2
 {
@@ -129,5 +138,14 @@ struct less_int2
         return (a.x != b.x) ? (a.x < b.x) : (a.y < b.y);
     };
 };
+
+struct equal_int2
+{
+    __host__ __device__ bool operator() (const longlong2& a, const longlong2& b)
+    {
+        return (a.x != b.x) ? false : (a.y == b.y);
+    };
+};
+
 #endif
 #endif

@@ -33,7 +33,7 @@ class GraphGPU
     GraphWeight *edgeWeights_[NGPU];
 
     GraphElem2 *commIdKeys_[NGPU];
-    GraphElem* indexOrders_[NGPU]; 
+    //GraphElem* indexOrders_[NGPU]; 
 
     GraphElem*   indices_[NGPU];
     GraphWeight* vertexWeights_[NGPU]; 
@@ -46,8 +46,9 @@ class GraphGPU
 
     GraphElem* newCommIds_[NGPU];
 
-    GraphElem* localCommNums_[NGPU];
-    GraphElem* localOffsets_[NGPU];
+    GraphElem*   localCommNums_[NGPU];
+    GraphWeight* orderedWeights_[NGPU];
+    //GraphWeight* reducedWeights_[NGPU];
 
     GraphElem maxOrder_;
     GraphWeight mass_;
@@ -61,9 +62,13 @@ class GraphGPU
     cudaStream_t cuStreams[NGPU][4];
 
     //related to sorting
-    thrust::device_ptr<GraphElem> orders_ptr[NGPU]; //= thrust::device_pointer_cast(indexOrders_);
-    thrust::device_ptr<GraphElem2> keys_ptr[NGPU]; // = thrust::device_pointer_cast(commIdKeys_);
+    thrust::device_ptr<GraphWeight> ordered_weights_ptr[NGPU];
+    //thrust::device_ptr<GraphWeight> reduced_weights_ptr[NGPU]; //= thrust::device_pointer_cast(indexOrders_);
+    thrust::device_ptr<GraphElem2>  keys_ptr[NGPU]; // = thrust::device_pointer_cast(commIdKeys_);
+    thrust::device_ptr<GraphElem>   local_comm_nums_ptr[NGPU];
+
     less_int2 comp;
+    equal_int2 is_equal_int2;
 
     GraphElem e0_[NGPU], e1_[NGPU];  //memory position with respect to edgesHost_
     GraphElem w0_[NGPU], w1_[NGPU];  //memory position with respect to edgeWeightsHost_
@@ -126,7 +131,8 @@ class GraphGPU
         const GraphElem& v1,   //ending global vertex index
         const GraphElem& e0,   //starting global edge index
         const GraphElem& e1,   //ending global edge index
-        const int& host_id
+        const int& host_id,
+        const int& exclude_self_loops
     );
 
     void louvain_update
@@ -160,7 +166,7 @@ class GraphGPU
     GraphGPU (Graph* graph, const int& nbatches, const int& part_on_deivce, const int& part_on_batch);
     ~GraphGPU();
 
-    void set_communtiy_ids(GraphElem* commIds);
+    void set_community_ids(GraphElem* commIds);
     void singleton_partition();
 
     void compute_community_weights(const int&);
@@ -233,6 +239,8 @@ class GraphGPU
 
     #ifdef CHECK
     void louvain_update_host(const int&);
+    void set_community_ids();
+    void compute_modularity_host();
     #endif
 };
 #endif

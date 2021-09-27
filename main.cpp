@@ -41,7 +41,7 @@ int main(int argc, char** argv)
     Int maxLoops = (Int)atoll(argv[pos+1]);
     Float tau = (Float)atof(argv[pos+2]);
     int nbatches = atoi(argv[pos+3]);
-
+    
     GraphGPU* graph_gpu = new GraphGPU(graph, nbatches, part_on_device, part_on_batch);
     LouvainGPU* louvain = new LouvainGPU(maxLoops, tau, nbatches);
 

@@ -22,6 +22,8 @@ void LouvainGPU::run(GraphGPU* graph)
     bool done = false;
 
     Int numPhases = 0;
+    double Q_old = 0.;
+
     total_start = omp_get_wtime();
     while(!done && numPhases < MAX_PHASES)
     {
@@ -33,6 +35,7 @@ void LouvainGPU::run(GraphGPU* graph)
         graph->set_community_ids();
         #endif        
         Float Q = graph->compute_modularity();
+        Q_old = Q;
         #ifdef CHECK
         graph->compute_modularity_host();
         #endif
@@ -102,12 +105,17 @@ void LouvainGPU::run(GraphGPU* graph)
         loop_time += end-start;
 
         #ifdef MULTIPHASE
-        double start_agg = omp_get_wtime();
-        done = graph->aggregation();
-        double end_agg =  omp_get_wtime();
-        double diff = end_agg-start_agg;
-        std::cout << "Aggregation time: " << diff << " s" << std::endl;
-        aggregate_time += diff;
+        if(Q-Q_old > tol_phase_)
+        {
+            double start_agg = omp_get_wtime();
+            done = graph->aggregation();
+            double end_agg =  omp_get_wtime();
+            double diff = end_agg-start_agg;
+            std::cout << "Aggregation time: " << diff << " s" << std::endl;
+            aggregate_time += diff;
+        }
+        else
+            done = true;
         #else
         done = true;
         #endif

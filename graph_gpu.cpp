@@ -95,7 +95,7 @@ NV_(0), NE_(0), maxOrder_(0), mass_(0)
     maxOrder_ = max_order();
     //for(int i = 0; i < NGPU; ++i)
     //    std::cout << ne_per_partition_[i] << std::endl;
-    std::cout << "max order is " << maxOrder_ << std::endl;
+    //std::cout << "max order is " << maxOrder_ << std::endl;
     for(int i = 0; i < NGPU; ++i)
     {
         if(maxOrder_ > ne_per_partition_[i])
@@ -369,7 +369,7 @@ GraphElem GraphGPU::determine_optimal_edges_per_partition
         free_m =(uint64_t)free_t/1048576.0 - occ_m;
 
         GraphElem ne_per_partition = (GraphElem)(free_m / unit_size / 8 * 1048576.0); //5 is the minimum, i chose 8
-        std::cout << ne_per_partition << " " << ne << std::endl;
+        //std::cout << ne_per_partition << " " << ne << std::endl;
         #ifdef debug
         return ((ne_per_partition > ne) ? ne : ne_per_partition);
         #else 

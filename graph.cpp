@@ -347,7 +347,7 @@ numColors_(0), colors_(nullptr)
     indices_ = new GraphElem [totalVertices_+1];
     //edges_ = new GraphElem [totalEdges_];
     //weights_ = new GraphWeight [totalEdges_];
-    Edge* edges = new Edge [totalEdges_];
+    //Edge* edges = new Edge [totalEdges_];
 
     uint64_t tot_bytes=(totalVertices_+1)*sizeof(GraphElem);
     ptrdiff_t offset = 2*sizeof(GraphElem);
@@ -370,13 +370,24 @@ numColors_(0), colors_(nullptr)
             if ((tot_bytes - transf_bytes) < INT_MAX)
                 chunk_bytes = tot_bytes - transf_bytes;
         } 
-    }    
+    } 
 
     if(indices_[totalVertices_] - indices_[0] != totalEdges_)
     {
-        std::cerr << "Error format in the file\n";
-        std::abort();
+        std::cout << "!!! The graph has been modified in edges\n";
+        std::cout << "Original edges: " << totalEdges_ << "\nNew edges: "<< indices_[totalVertices_] - indices_[0] << std::endl;
     }
+   
+    totalEdges_ = indices_[totalVertices_] - indices_[0];
+    Edge* edges = new Edge [totalEdges_];
+ 
+    /*if(indices_[totalVertices_] - indices_[0] != totalEdges_)
+    {
+        std::cerr << "Error format in the file\n";
+        std::cerr << indices_[totalVertices_] << " and " << totalEdges_ << std::endl;
+       
+        std::abort();
+    }*/
  
     tot_bytes = totalEdges_*(sizeof(Edge));
     offset = 2*sizeof(GraphElem) + (totalVertices_+1)*sizeof(GraphElem) 

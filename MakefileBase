@@ -2,17 +2,18 @@ NVCC:=nvcc
 CC:=g++
 
 #SM=70
-graph_ft_load=1
+graph_ft_load=0
 check=0
 debug=0
+dump=0
 ifeq ($(debug), 1)
 	CUFLAGS = -g -G -Ddebug --std=c++14 --gpu-architecture=compute_${SM} --gpu-code=sm_${SM},compute_${SM} \
                   -Xcompiler -fopenmp -DMULTIPHASE -DNGPU=1 -DPRINT
 	CFLAGS = -g -Ddebug -std=c++14 -Wextra -Wall -DMULTIPHASE -DNGPU=1 -DPRINT
 else 
 	CUFLAGS = -O3 -Xptxas -O3 --std=c++14 --gpu-architecture=compute_${SM} --gpu-code=sm_${SM},compute_${SM} \
-                  -Xcompiler -O3 -Xcompiler -fopenmp -DMULTIPHASE -DPRINT -DNGPU=${NGPU} -DDUMP
-	CFLAGS = -O3 -std=c++14 -Wextra -Wall -DMULTIPHASE -DPRINT -DNGPU=${NGPU} -DDUMP
+                  -Xcompiler -O3 -Xcompiler -fopenmp -DMULTIPHASE -DPRINT -DNGPU=${NGPU}
+	CFLAGS = -O3 -std=c++14 -Wextra -Wall -DMULTIPHASE -DPRINT -DNGPU=${NGPU}
 endif
 
 ifeq ($(check),1)
@@ -37,6 +38,11 @@ else ifeq ($(bit),64)
 else
 	CUFLAGS += -DUSE_64BIT
 	CFLAGS  += -DUSE_64BIT
+endif
+
+ifeq ($(dump),1)
+        CUFLAGS += -DDUMP
+        CFLAGS  += -DDUMP
 endif
 
 EXE:= run_${NGPU}_${SM}

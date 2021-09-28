@@ -89,6 +89,14 @@ NV_(0), NE_(0), maxOrder_(0), mass_(0)
         //CudaDeviceSynchronize();
     }
     maxOrder_ = max_order();
+    for(int i = 0; i < NGPU; ++i)
+    {
+        if(maxOrder_ > ne_per_partition_[i])
+        {
+            std::cout <<"Maximum order exceeds the maximum edge capacity\n";
+            exit(-1);
+        }
+    }
     //std::cout << "max order is " << maxOrder_ << std::endl;
     compute_mass();
 
@@ -1442,16 +1450,15 @@ bool GraphGPU::aggregation()
     //    std::cerr << "WARNING: Max order may exceed buffer size !!!" << std::endl;
     
     //std::cout << "max order is " << maxOrder_ << std::endl;
-    /*for(int i = 0; i < NGPU; ++i)
+    for(int i = 0; i < NGPU; ++i)
     {
         if(maxOrder_ > ne_per_partition_[i])
         {
-            std::cout << "max order is " << maxOrder_ << std::endl;
-            std::cout << "vertex order is too large" << std::endl;
+            std::cout <<"Maximum order exceeds the maximum edge capacity\n";
             exit(-1);
         }
     }
-    */
+    
     for(int i = 0; i < NGPU; ++i)
     {
         CudaSetDevice(i);

@@ -11,6 +11,11 @@
 #include "graph.hpp"
 #include "cuda_wrapper.hpp"
 
+#ifdef USE_PAR_EXEC_POLICY
+#include <numeric>
+#include <execution>
+#endif
+
 GraphGPU::GraphGPU(Graph* graph, const int& nbatches, const int& part_on_device, const int& part_on_batch) : 
 graph_(graph), nbatches_(nbatches), part_on_device_(part_on_device), part_on_batch_(part_on_batch), 
 NV_(0), NE_(0), maxOrder_(0), mass_(0)
@@ -1210,7 +1215,11 @@ void GraphGPU::compress_edges()
     }
 
     sortedIndicesHost_[0] = 0;
+#ifdef USE_PAR_EXEC_POLICY
+    std::inclusive_scan(std::execution::par, numEdgesHost_, numEdgesHost_+NV_, sortedIndicesHost_+1);
+#else
     std::partial_sum(numEdgesHost_, numEdgesHost_+NV_, sortedIndicesHost_+1);
+#endif
     //std::inclusive_scan(std::execution::par, numEdgesHost_, numEdgesHost_+NV_, sortedIndicesHost_+1);
     //parallel_inclusive_scan(numEdgesHost_, numEdgesHost_+NV_, sortedIndicesHost_+1);
  

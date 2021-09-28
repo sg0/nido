@@ -13,6 +13,7 @@
 
 #ifdef USE_PAR_EXEC_POLICY
 #include <numeric>
+#include <execution>
 #endif
 
 GraphGPU::GraphGPU(Graph* graph, const int& nbatches, const int& part_on_device, const int& part_on_batch) : 

@@ -1,7 +1,7 @@
 NVCC:=nvcc
 CXX:=nvc++
-SM=70
-NGPU=1
+#SM=70
+#NGPU=1
 # NUMA nodes
 NSOCKETS=2
 
@@ -17,7 +17,7 @@ ifeq ($(debug), 1)
 else 
 	CUFLAGS = -O3 -Xptxas -O3 --std=c++14 --gpu-architecture=compute_${SM} --gpu-code=sm_${SM},compute_${SM} \
                   -Xcompiler -O3 -Xcompiler -fopenmp -DMULTIPHASE -DPRINT -DNGPU=${NGPU} -DDUMP
-	CXXFLAGS = -O3 -mcmodel=medium -Wextra -Wall -DMULTIPHASE -DPRINT -DNGPU=${NGPU} -DDUMP
+	CXXFLAGS = -O3 -mcmodel=medium -fopenmp -Wextra -Wall -DMULTIPHASE -DPRINT -DNGPU=${NGPU} -DDUMP
 endif
 
 ifeq ($(use_par_exec_policy), 1)

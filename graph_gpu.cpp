@@ -63,7 +63,6 @@ NV_(0), NE_(0), maxOrder_(0), mass_(0)
 
         ne_per_partition_[id] = determine_optimal_edges_per_partition(nv, ne, unit_size);
         GraphElem ne_per_partition = ne_per_partition_[id];
-
         determine_optimal_vertex_partition(indicesHost_, nv, ne, ne_per_partition, vertex_partition_[id], v_base_[id]);
 
         CudaMalloc(edges_[id],          unit_size*ne_per_partition);
@@ -94,10 +93,14 @@ NV_(0), NE_(0), maxOrder_(0), mass_(0)
         //CudaDeviceSynchronize();
     }
     maxOrder_ = max_order();
+    //for(int i = 0; i < NGPU; ++i)
+    //    std::cout << ne_per_partition_[i] << std::endl;
+    std::cout << "max order is " << maxOrder_ << std::endl;
     for(int i = 0; i < NGPU; ++i)
     {
         if(maxOrder_ > ne_per_partition_[i])
         {
+            std::cout << i << " " << maxOrder_ << " " <<  ne_per_partition_[i] << std::endl;
             std::cout <<"Maximum order exceeds the maximum edge capacity\n";
             exit(-1);
         }
@@ -366,7 +369,7 @@ GraphElem GraphGPU::determine_optimal_edges_per_partition
         free_m =(uint64_t)free_t/1048576.0 - occ_m;
 
         GraphElem ne_per_partition = (GraphElem)(free_m / unit_size / 8 * 1048576.0); //5 is the minimum, i chose 8
-        //std::cout << ne_per_partition << " " << ne << std::endl;
+        std::cout << ne_per_partition << " " << ne << std::endl;
         #ifdef debug
         return ((ne_per_partition > ne) ? ne : ne_per_partition);
         #else 
@@ -1073,7 +1076,11 @@ void GraphGPU::shuffle_edge_list()
         numEdgesHost_[i] = indicesHost_[pos+1]-indicesHost_[pos+0];
     }
     sortedIndicesHost_[0] = 0;
+    #ifdef USE_PAR_EXEC_POLICY
+    std::inclusive_scan(std::execution::par, numEdgesHost_, numEdgesHost_+NV_, sortedIndicesHost_+1);
+    #else
     std::partial_sum(numEdgesHost_, numEdgesHost_+NV_, sortedIndicesHost_+1);
+    #endif
 
     GraphElem* bufferEdges = (GraphElem*)buffer_;
 
@@ -1144,9 +1151,11 @@ GraphElem GraphGPU::sort_vertex_by_community_ids()
         sortedVertexIdsHost_[i] = {commIdsHost_[i], vertexIdsHost_[i]};
 
     less_int2 myless;
-
+    #ifdef USE_PAR_EXEC_POLICY
+    std::sort(std::execution::par, sortedVertexIdsHost_, sortedVertexIdsHost_+NV_, myless);
+    #else
     std::stable_sort(sortedVertexIdsHost_, sortedVertexIdsHost_+NV_, myless);
-   
+    #endif
     #pragma omp parallel for
     for(GraphElem i = 0; i < NV_; ++i)
     {

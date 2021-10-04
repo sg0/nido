@@ -480,7 +480,8 @@ void GraphGPU::sort_edges_by_community_ids
 
         GraphElem num_unique_id = new_ends.first - keys_ptr[host_id];
 
-        fill_unique_community_counts_cuda(localCommNums_[host_id]+1, commIdKeys_[host_id], v0, num_unique_id);
+        if(num_unique_id > 0)
+            fill_unique_community_counts_cuda(localCommNums_[host_id]+1, commIdKeys_[host_id], v0, num_unique_id);
 
         //CudaDeviceSynchronize();
 

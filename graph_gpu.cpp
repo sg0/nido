@@ -68,8 +68,11 @@ NV_(0), NE_(0), maxOrder_(0), mass_(0)
         CudaMalloc(edges_[id],          unit_size*ne_per_partition);
         CudaMalloc(edgeWeights_[id],    unit_size*ne_per_partition);
         CudaMalloc(commIdKeys_[id],     sizeof(GraphElem2)*ne_per_partition);
-        //CudaMalloc(reducedWeights_[id], sizeof(GraphWeight)*ne_per_partition);
         CudaMalloc(orderedWeights_[id], sizeof(GraphWeight)*ne_per_partition);
+
+        CudaMalloc(reducedWeights_[id], sizeof(GraphWeight)*ne_per_partition);
+        CudaMalloc(reducedCommIdKeys_[id], sizeof(GraphElem2)*ne_per_partition);
+
 
         CudaMalloc(localCommNums_[id],    sizeof(GraphElem)*(nv+1));
         CudaMemset(localCommNums_[id], 0, sizeof(GraphElem)*(nv+1));
@@ -85,6 +88,9 @@ NV_(0), NE_(0), maxOrder_(0), mass_(0)
         keys_ptr[id]            = thrust::device_pointer_cast(commIdKeys_[id]);
         local_comm_nums_ptr[id] = thrust::device_pointer_cast(localCommNums_[id]);
 
+        reduced_weights_ptr[id] = thrust::device_pointer_cast(reducedWeights_[id]);
+        reduced_keys_ptr[id]    = thrust::device_pointer_cast(reducedCommIdKeys_[id]);
+
         sum_vertex_weights(id);
         CudaDeviceSynchronize();
 
@@ -98,7 +104,7 @@ NV_(0), NE_(0), maxOrder_(0), mass_(0)
     //std::cout << "max order is " << maxOrder_ << std::endl;
     for(int i = 0; i < NGPU; ++i)
     {
-        if(maxOrder_ > ne_per_partition_[i])
+        if(maxOrder_ > ne_per_partition_[i] && ne_per_partition_[i] < ne_[i])
         {
             std::cout << i << " " << maxOrder_ << " " <<  ne_per_partition_[i] << std::endl;
             std::cout <<"Maximum order exceeds the maximum edge capacity\n";
@@ -199,6 +205,8 @@ GraphGPU::~GraphGPU()
         CudaFree(localCommNums_[g]);
         CudaFree(orderedWeights_[g]);
         CudaFree(vertex_per_device_[g]);
+        CudaFree(reducedWeights_[g]);
+        CudaFree(reducedCommIdKeys_[g]);
         //CudaFree(reducedWeights_[g]);
         delete [] vertex_per_batch_[g];
     }
@@ -368,8 +376,10 @@ GraphElem GraphGPU::determine_optimal_edges_per_partition
         float occ_m = (uint64_t)((4*sizeof(GraphElem)+2*sizeof(GraphWeight))*nv)/1048576.0;
         free_m =(uint64_t)free_t/1048576.0 - occ_m;
 
-        GraphElem ne_per_partition = (GraphElem)(free_m / unit_size / 8 * 1048576.0); //5 is the minimum, i chose 8
+        GraphElem ne_per_partition = (GraphElem)(free_m / unit_size / 11.5 * 1048576.0); //5 is the minimum, i chose 8
         //std::cout << ne_per_partition << " " << ne << std::endl;
+        if(ne_per_partition < ne)
+            std::cout << "!!! Graph too large !!!\n";
         #ifdef debug
         return ((ne_per_partition > ne) ? ne : ne_per_partition);
         #else 
@@ -475,13 +485,15 @@ void GraphGPU::sort_edges_by_community_ids
 
         thrust::pair<thrust::device_ptr<GraphElem2>,thrust::device_ptr<GraphWeight> > new_ends;
 
+        //new_ends = thrust::reduce_by_key(keys_ptr[host_id], keys_ptr[host_id]+ne, ordered_weights_ptr[host_id], 
+        //keys_ptr[host_id], ordered_weights_ptr[host_id], is_equal_int2);
         new_ends = thrust::reduce_by_key(keys_ptr[host_id], keys_ptr[host_id]+ne, ordered_weights_ptr[host_id], 
-        keys_ptr[host_id], ordered_weights_ptr[host_id], is_equal_int2);
+        reduced_keys_ptr[host_id], reduced_weights_ptr[host_id], is_equal_int2);
 
-        GraphElem num_unique_id = new_ends.first - keys_ptr[host_id];
+        GraphElem num_unique_id = new_ends.first - reduced_keys_ptr[host_id];
 
-        if(num_unique_id > 0)
-            fill_unique_community_counts_cuda(localCommNums_[host_id]+1, commIdKeys_[host_id], v0, num_unique_id);
+        //if(num_unique_id > 0)
+        fill_unique_community_counts_cuda(localCommNums_[host_id]+1, reducedCommIdKeys_[host_id], v0, num_unique_id);
 
         //CudaDeviceSynchronize();
 
@@ -565,7 +577,8 @@ void GraphGPU::louvain_update
         //GraphElem e0_local = e0 - e0_[host_id];
         //GraphElem w0_local = e0 - w0_[host_id];
         //louvain_update_cuda(((GraphElem*)commIdKeys_[host_id]), ((GraphElem*)commIdKeys_[host_id])+ne, 
-        louvain_update_cuda(commIdKeys_[host_id], localCommNums_[host_id], orderedWeights_[host_id], 
+        //louvain_update_cuda(commIdKeys_[host_id], localCommNums_[host_id], orderedWeights_[host_id], 
+        louvain_update_cuda(reducedCommIdKeys_[host_id], localCommNums_[host_id], reducedWeights_[host_id],
                             vertexWeights_[host_id], commIds_[host_id], commWeightsPtr_[host_id], newCommIds_[host_id], 
                             mass_, v0, v1, e0, e1, V0, vertex_per_device_[host_id]);
     }
@@ -1471,7 +1484,7 @@ bool GraphGPU::aggregation()
     //std::cout << "max order is " << maxOrder_ << std::endl;
     for(int i = 0; i < NGPU; ++i)
     {
-        if(maxOrder_ > ne_per_partition_[i])
+        if(maxOrder_ > ne_per_partition_[i] && ne_per_partition_[i] < ne_[i])
         {
             std::cout <<"Maximum order exceeds the maximum edge capacity\n";
             exit(-1);

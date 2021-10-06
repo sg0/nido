@@ -48,7 +48,8 @@ class GraphGPU
 
     GraphElem*   localCommNums_[NGPU];
     GraphWeight* orderedWeights_[NGPU];
-    //GraphWeight* reducedWeights_[NGPU];
+    GraphWeight* reducedWeights_[NGPU];
+    GraphElem2*  reducedCommIdKeys_[NGPU];
 
     GraphElem maxOrder_;
     GraphWeight mass_;
@@ -66,6 +67,8 @@ class GraphGPU
     //thrust::device_ptr<GraphWeight> reduced_weights_ptr[NGPU]; //= thrust::device_pointer_cast(indexOrders_);
     thrust::device_ptr<GraphElem2>  keys_ptr[NGPU]; // = thrust::device_pointer_cast(commIdKeys_);
     thrust::device_ptr<GraphElem>   local_comm_nums_ptr[NGPU];
+    thrust::device_ptr<GraphWeight> reduced_weights_ptr[NGPU];
+    thrust::device_ptr<GraphElem2>  reduced_keys_ptr[NGPU];
 
     less_int2 comp;
     equal_int2 is_equal_int2;

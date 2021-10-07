@@ -544,7 +544,7 @@ Community* Partition::get_community(const long& i)
 }
 #endif
 //implement Luby's algorithm for coloring
-void Graph::coloring()
+GraphElem* Graph::coloring()
 {
     colors_ = new GraphElem [totalVertices_];
     std::fill(colors_, colors_+totalVertices_, -1);
@@ -626,12 +626,14 @@ void Graph::coloring()
     GraphElem* numEdges = new GraphElem [totalVertices_];
     GraphElem* sortedIndices = new GraphElem [totalVertices_+1];
     GraphElem* orders = new  GraphElem [totalVertices_];
+    GraphElem* new_orders = new GraphElem [totalVertices_];
     #pragma omp parallel for
     for(GraphElem i = 0; i < totalVertices_; ++i)
     {
         GraphElem id = colors_id[i].y;
         numEdges[i] = indices_[id+1]-indices_[id];
         orders[id] = i;
+        new_orders[i] = id;
     }
     sortedIndices[0] = 0;
     std::partial_sum(numEdges, numEdges+totalVertices_, sortedIndices+1);
@@ -687,4 +689,5 @@ void Graph::coloring()
     delete [] orders;
     delete [] indices_;
     indices_ = sortedIndices;
+    return new_orders;
 }     

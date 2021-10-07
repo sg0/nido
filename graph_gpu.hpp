@@ -237,7 +237,7 @@ class GraphGPU
 
     #ifdef MULTIPHASE
     bool aggregation();
-    void dump_partition(const std::string&);
+    void dump_partition(const std::string&, GraphElem*);
     #endif
 
     #ifdef CHECK

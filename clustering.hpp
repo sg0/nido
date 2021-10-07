@@ -37,6 +37,6 @@ class Clustering
     }*/
 
     void update_clustering(GraphElem* commIdsHost_);
-    void dump_partition(const std::string&);
+    void dump_partition(const std::string&, GraphElem* new_orders);
 };
 #endif

@@ -1529,8 +1529,8 @@ bool GraphGPU::aggregation()
     return false;
 }
 
-void GraphGPU::dump_partition(const std::string& filename)
+void GraphGPU::dump_partition(const std::string& filename, GraphElem* new_orders=nullptr)
 {
-    clusters_->dump_partition(filename);
+    clusters_->dump_partition(filename, new_orders);
 }
 #endif

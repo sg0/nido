@@ -20,8 +20,21 @@ void Clustering::update_clustering(GraphElem* commIdsHost)
     }
 }
 
-void Clustering::dump_partition(const std::string& filename)
+void Clustering::dump_partition(const std::string& filename, GraphElem* new_orders)
 {
+    if(new_orders != nullptr)
+    {
+        GraphElem* tmp = new GraphElem[nv_];
+        #pragma omp parallel for
+        for(GraphElem i = 0; i < nv_; ++i)
+        {
+            GraphElem c = commIds_[i];
+            GraphElem id = new_orders[i];
+            tmp[id] = c;
+        }
+        delete [] commIds_;
+        commIds_ = tmp;
+    }
     FILE* pFile;
     pFile = fopen(filename.c_str(), "wt");
     if(pFile != nullptr)

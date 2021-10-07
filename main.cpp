@@ -38,6 +38,18 @@ int main(int argc, char** argv)
         pos += 3;
     }
 
+    bool is_colored = 0;
+    GraphElem* new_orders = nullptr;
+    if(std::string(argv[pos+1]) == "-c")
+    {
+        is_colored = 1;
+        //timing coloring here
+        double color_start = omp_get_wtime();
+        new_orders = graph->coloring(); 
+        double color_end = omp_get_wtime();
+        std::cout << "Coloring Time: " << color_end-color_start << " s\n";
+        pos += 1;
+    }
     Int maxLoops = (Int)atoll(argv[pos+1]);
     Float tau = (Float)atof(argv[pos+2]);
     int nbatches = atoi(argv[pos+3]);
@@ -47,9 +59,11 @@ int main(int argc, char** argv)
 
     louvain->run(graph_gpu);
     #ifdef DUMP
-    graph_gpu->dump_partition(std::string(argv[pos+4]));
+    graph_gpu->dump_partition(std::string(argv[pos+4]), new_orders);
     #endif
 
+    if(is_colored)
+        delete [] new_orders;
     delete louvain;
     delete graph_gpu;
     delete graph;

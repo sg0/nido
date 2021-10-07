@@ -79,7 +79,7 @@ class Graph
     //print statistics
     void print_stats();
 
-    void coloring();
+    GraphElem* coloring();
     //void reset_orders_weights();
     void neigh_scan(const int& num_threads);
     void neigh_scan_weights(const int& num_threads);

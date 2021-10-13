@@ -599,6 +599,13 @@ template void copy_vector_cuda<GraphWeight>
     cudaStream_t stream
 );
 
+template void copy_vector_cuda<GraphElem2>
+(
+    GraphElem2* dest,
+    GraphElem2* src,
+    const GraphElem& nv,
+    cudaStream_t stream
+);
 /*
 void move_index_orders_cuda
 (

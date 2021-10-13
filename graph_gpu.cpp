@@ -70,8 +70,8 @@ NV_(0), NE_(0), maxOrder_(0), mass_(0)
         CudaMalloc(commIdKeys_[id],     sizeof(GraphElem2)*ne_per_partition);
         CudaMalloc(orderedWeights_[id], sizeof(GraphWeight)*ne_per_partition);
 
-        CudaMalloc(reducedWeights_[id], sizeof(GraphWeight)*ne_per_partition);
-        CudaMalloc(reducedCommIdKeys_[id], sizeof(GraphElem2)*ne_per_partition);
+        //CudaMalloc(reducedWeights_[id], sizeof(GraphWeight)*ne_per_partition);
+        //CudaMalloc(reducedCommIdKeys_[id], sizeof(GraphElem2)*ne_per_partition);
 
 
         CudaMalloc(localCommNums_[id],    sizeof(GraphElem)*(nv+1));
@@ -88,8 +88,8 @@ NV_(0), NE_(0), maxOrder_(0), mass_(0)
         keys_ptr[id]            = thrust::device_pointer_cast(commIdKeys_[id]);
         local_comm_nums_ptr[id] = thrust::device_pointer_cast(localCommNums_[id]);
 
-        reduced_weights_ptr[id] = thrust::device_pointer_cast(reducedWeights_[id]);
-        reduced_keys_ptr[id]    = thrust::device_pointer_cast(reducedCommIdKeys_[id]);
+        //reduced_weights_ptr[id] = thrust::device_pointer_cast(reducedWeights_[id]);
+        //reduced_keys_ptr[id]    = thrust::device_pointer_cast(reducedCommIdKeys_[id]);
 
         sum_vertex_weights(id);
         CudaDeviceSynchronize();
@@ -205,8 +205,8 @@ GraphGPU::~GraphGPU()
         CudaFree(localCommNums_[g]);
         CudaFree(orderedWeights_[g]);
         CudaFree(vertex_per_device_[g]);
-        CudaFree(reducedWeights_[g]);
-        CudaFree(reducedCommIdKeys_[g]);
+        //CudaFree(reducedWeights_[g]);
+        //CudaFree(reducedCommIdKeys_[g]);
         //CudaFree(reducedWeights_[g]);
         delete [] vertex_per_batch_[g];
     }
@@ -376,7 +376,7 @@ GraphElem GraphGPU::determine_optimal_edges_per_partition
         float occ_m = (uint64_t)((4*sizeof(GraphElem)+2*sizeof(GraphWeight))*nv)/1048576.0;
         free_m =(uint64_t)free_t/1048576.0 - occ_m;
 
-        GraphElem ne_per_partition = (GraphElem)(free_m / unit_size / 11.5 * 1048576.0); //5 is the minimum, i chose 8
+        GraphElem ne_per_partition = (GraphElem)(free_m / unit_size / 8.25 * 1048576.0); //5 is the minimum, i chose 8
         //std::cout << ne_per_partition << " " << ne << std::endl;
         if(ne_per_partition < ne)
             std::cout << "!!! Graph too large !!!\n";
@@ -487,14 +487,29 @@ void GraphGPU::sort_edges_by_community_ids
 
         //new_ends = thrust::reduce_by_key(keys_ptr[host_id], keys_ptr[host_id]+ne, ordered_weights_ptr[host_id], 
         //keys_ptr[host_id], ordered_weights_ptr[host_id], is_equal_int2);
-        new_ends = thrust::reduce_by_key(keys_ptr[host_id], keys_ptr[host_id]+ne, ordered_weights_ptr[host_id], 
-        reduced_keys_ptr[host_id], reduced_weights_ptr[host_id], is_equal_int2);
 
-        GraphElem num_unique_id = new_ends.first - reduced_keys_ptr[host_id];
+        if(ne > 0)
+        {
+            CudaMalloc(reducedCommIdKeys_[host_id], sizeof(GraphElem2)*ne);
+            CudaMalloc(reducedWeights_[host_id], sizeof(GraphWeight)*ne);
 
-        //if(num_unique_id > 0)
-        fill_unique_community_counts_cuda(localCommNums_[host_id]+1, reducedCommIdKeys_[host_id], v0, num_unique_id);
+            reduced_weights_ptr[host_id] = thrust::device_pointer_cast(reducedWeights_[host_id]);
+            reduced_keys_ptr[host_id]    = thrust::device_pointer_cast(reducedCommIdKeys_[host_id]);
+        
+            new_ends = thrust::reduce_by_key(keys_ptr[host_id], keys_ptr[host_id]+ne, ordered_weights_ptr[host_id], 
+            reduced_keys_ptr[host_id], reduced_weights_ptr[host_id], is_equal_int2);
 
+            GraphElem num_unique_id = new_ends.first - reduced_keys_ptr[host_id];
+            //copy vector here
+            copy_vector_cuda<GraphWeight>(orderedWeights_[host_id], reducedWeights_[host_id], ne, cuStreams[host_id][0]); 
+            copy_vector_cuda<GraphElem2>(commIdKeys_[host_id], reducedCommIdKeys_[host_id], ne, cuStreams[host_id][1]);
+            
+            CudaFree(reducedCommIdKeys_[host_id]);
+            CudaFree(reducedWeights_[host_id]);
+
+            if(num_unique_id > 0)
+                fill_unique_community_counts_cuda(localCommNums_[host_id]+1, commIdKeys_[host_id], v0, num_unique_id);
+        }
         //CudaDeviceSynchronize();
 
         thrust::inclusive_scan(local_comm_nums_ptr[host_id], local_comm_nums_ptr[host_id]+nv+1, local_comm_nums_ptr[host_id]);
@@ -577,8 +592,8 @@ void GraphGPU::louvain_update
         //GraphElem e0_local = e0 - e0_[host_id];
         //GraphElem w0_local = e0 - w0_[host_id];
         //louvain_update_cuda(((GraphElem*)commIdKeys_[host_id]), ((GraphElem*)commIdKeys_[host_id])+ne, 
-        //louvain_update_cuda(commIdKeys_[host_id], localCommNums_[host_id], orderedWeights_[host_id], 
-        louvain_update_cuda(reducedCommIdKeys_[host_id], localCommNums_[host_id], reducedWeights_[host_id],
+        louvain_update_cuda(commIdKeys_[host_id], localCommNums_[host_id], orderedWeights_[host_id], 
+        //louvain_update_cuda(reducedCommIdKeys_[host_id], localCommNums_[host_id], reducedWeights_[host_id],
                             vertexWeights_[host_id], commIds_[host_id], commWeightsPtr_[host_id], newCommIds_[host_id], 
                             mass_, v0, v1, e0, e1, V0, vertex_per_device_[host_id]);
     }

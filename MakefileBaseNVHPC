@@ -16,8 +16,8 @@ ifeq ($(debug), 1)
 	CXXFLAGS = -g -Ddebug -mcmodel=medium -Wextra -Wall -DMULTIPHASE -DNGPU=1 -DPRINT 
 else 
 	CUFLAGS = -O3 -Xptxas -O3 --std=c++14 --gpu-architecture=compute_${SM} --gpu-code=sm_${SM},compute_${SM} \
-                  -Xcompiler -O3 -Xcompiler -fopenmp -DMULTIPHASE -DPRINT -DNGPU=${NGPU} -DDUMP
-	CXXFLAGS = -O3 -mcmodel=medium -fopenmp -Wextra -Wall -DMULTIPHASE -DPRINT -DNGPU=${NGPU} -DDUMP
+                  -Xcompiler -O3 -Xcompiler -fopenmp -DMULTIPHASE -DPRINT -DNGPU=${NGPU}
+	CXXFLAGS = -O3 -mcmodel=medium -fopenmp -Wextra -Wall -DMULTIPHASE -DPRINT -DNGPU=${NGPU}
 endif
 
 ifeq ($(use_par_exec_policy), 1)
@@ -82,4 +82,4 @@ ${EXE}: graph_gpu.o graph_cuda.o graph.o louvain_gpu.o main.o heap.o clustering.
 endif
 
 clean:
-	rm -f *.o
+	rm -f *.o ${EXE}

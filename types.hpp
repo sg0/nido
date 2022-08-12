@@ -21,7 +21,21 @@ using Float2 = double2;
 using UInt = uint64_t;
 #endif
 
-#define MAX_PHASES 200
+#ifndef MAX_PHASES
+#define MAX_PHASES (200)
+#endif
+
+#ifndef DEFAULT_ITERATIONS
+#define DEFAULT_ITERATIONS (500)
+#endif
+
+#ifndef DEFAULT_BATCHES
+#define DEFAULT_BATCHES (2)
+#endif
+
+#ifndef DEFAULT_THRESHOLD
+#define DEFAULT_THRESHOLD (1.0E-06)
+#endif
 
 #ifdef EDGE_AS_VERTEX_PAIR
 struct Edge

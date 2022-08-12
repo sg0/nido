@@ -1,40 +1,82 @@
-CXX = mpicxx
+NVCC:=nvcc
+CC:=g++
 
-USE_TAUPROF=0
-ifeq ($(USE_TAUPROF),1)
-TAU=/soft/perftools/tau/tau-2.29/craycnl/lib
-CXX = tau_cxx.sh -tau_makefile=$(TAU)/Makefile.tau-intel-papi-mpi-pdt 
+SM=70
+NGPU=1
+graph_ft_load=0
+check=0
+debug=0
+ifeq ($(debug), 1)
+	CUFLAGS = -g -G -Ddebug --std=c++14 --gpu-architecture=compute_${SM} --gpu-code=sm_${SM},compute_${SM} \
+                  -Xcompiler -fopenmp -DMULTIPHASE -DNGPU=1 -DPRINT
+	CFLAGS = -g -Ddebug -std=c++14 -Wextra -Wall -DMULTIPHASE -DNGPU=1 -DPRINT
+else 
+	CUFLAGS = -O3 -Xptxas -O3 --std=c++14 --gpu-architecture=compute_${SM} --gpu-code=sm_${SM},compute_${SM} \
+                  -Xcompiler -O3 -Xcompiler -fopenmp -DMULTIPHASE -DPRINT -DNGPU=${NGPU}
+	CFLAGS = -O3 -std=c++14 -Wextra -Wall -DMULTIPHASE -DPRINT -DNGPU=${NGPU}
 endif
 
-# use -xmic-avx512 instead of -xHost for Intel Xeon Phi platforms
-OPTFLAGS = -O3 -fopenmp -DPRINT_DIST_STATS 
-# use export ASAN_OPTIONS=verbosity=1 to check ASAN output
-SNTFLAGS = -std=c++11 -fopenmp -fsanitize=address -O1 -fno-omit-frame-pointer
-CXXFLAGS = -std=c++11 -g $(OPTFLAGS)
-
-ENABLE_DUMPI_TRACE=0
-ENABLE_SCOREP_TRACE=0
-ifeq ($(ENABLE_DUMPI_TRACE),1)
-	TRACERPATH = $(HOME)/builds/sst-dumpi/lib 
-	LDFLAGS = -L$(TRACERPATH) -ldumpi
-else ifeq ($(ENABLE_SCOREP_TRACE),1)
-	SCOREP_INSTALL_PATH = /usr/common/software/scorep/6.0/intel
-	INCLUDE = -I$(SCOREP_INSTALL_PATH)/include -I$(SCOREP_INSTALL_PATH)/include/scorep -DSCOREP_USER_ENABLE
-	LDAPP = $(SCOREP_INSTALL_PATH)/bin/scorep --user --nocompiler --noopenmp --nopomp --nocuda --noopenacc --noopencl --nomemory
+ifeq ($(check),1)
+	CUFLAGS += -DCHECK
+	CFLAGS  += -DCHECK
 endif
 
-OBJ = main.o
-TARGET = nido 
+ifeq ($(graph_ft_load),1)
+	CUFLAGS += -DGRAPH_FT_LOAD=4
+	CFLAGS  += -DGRAPH_FT_LOAD=4
+else
+	CUFLAGS += -DGRAPH_FT_LOAD=2
+	CFLAGS  += -DGRAPH_FT_LOAD=2
+endif
 
-all: $(TARGET)
+ifeq ($(bit),32)
+	CUFLAGS += -DUSE_32BIT
+	CFLAGS  += -DUSE_32BIT
+else ifeq ($(bit),64)
+	CUFLAGS += -DUSE_64BIT
+	CFLAGS  += -DUSE_64BIT
+else
+	CUFLAGS += -DUSE_64BIT
+	CFLAGS  += -DUSE_64BIT
+endif
 
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c -o $@ $^
+EXE:= run_${NGPU}_${SM}
 
-$(TARGET):  $(OBJ)
-	$(CXX) $^ $(OPTFLAGS) -o $@
+all: ${EXE}
 
-.PHONY: clean
+graph.o: graph.cpp graph.hpp types.hpp
+	${NVCC} -x cu ${CUFLAGS} -dc -c $< -o $@
+
+graph_gpu.o: graph_gpu.cpp graph_gpu.hpp cuda_wrapper.hpp types.hpp
+	${NVCC} -x cu ${CUFLAGS} -dc -c $< -o $@
+
+louvain_gpu.o: louvain_gpu.cpp louvain_gpu.hpp cuda_wrapper.hpp types.hpp
+	${NVCC} -x cu ${CUFLAGS} -dc -c $< -o $@
+
+main.o: main.cpp graph.hpp graph_gpu.hpp cuda_wrapper.hpp types.hpp louvain_gpu.hpp
+	${NVCC} -x cu ${CUFLAGS} -dc -c $< -o $@
+
+graph_cuda.o: graph_cuda.cu graph_cuda.hpp graph.cpp graph.hpp
+	${NVCC} ${CUFLAGS} -c $< -o $@
+
+heap.o : heap.cpp heap.hpp types.hpp
+	${NVCC} -x cu ${CUFLAGS} -dc -c $< -o $@
+
+clustering.o: clustering.cpp clustering.hpp types.hpp
+	${NVCC} -x cu ${CUFLAGS} -dc -c $< -o $@
+
+ifeq ($(check),1)
+graph_cpu.o: graph_cpu.cpp graph_cpu.hpp
+	${NVCC} -x cu ${CUFLAGS} -dc -c $< -o $@
+endif
+
+ifeq ($(check),1)
+${EXE}: graph_gpu.o graph_cuda.o graph.o louvain_gpu.o main.o heap.o clustering.o graph_cpu.o
+	${NVCC} ${CUFLAGS} $^ -o $@
+else
+${EXE}: graph_gpu.o graph_cuda.o graph.o louvain_gpu.o main.o heap.o clustering.o
+	${NVCC} ${CUFLAGS} $^ -o $@
+endif
 
 clean:
-	rm -rf *~ $(OBJ) $(TARGET)
+	rm -f *.o ${EXE}

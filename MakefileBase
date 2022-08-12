@@ -5,7 +5,6 @@ CC:=g++
 graph_ft_load=0
 check=0
 debug=0
-dump=0
 ifeq ($(debug), 1)
 	CUFLAGS = -g -G -Ddebug --std=c++14 --gpu-architecture=compute_${SM} --gpu-code=sm_${SM},compute_${SM} \
                   -Xcompiler -fopenmp -DMULTIPHASE -DNGPU=1 -DPRINT
@@ -38,11 +37,6 @@ else ifeq ($(bit),64)
 else
 	CUFLAGS += -DUSE_64BIT
 	CFLAGS  += -DUSE_64BIT
-endif
-
-ifeq ($(dump),1)
-        CUFLAGS += -DDUMP
-        CFLAGS  += -DDUMP
 endif
 
 EXE:= run_${NGPU}_${SM}
@@ -84,4 +78,4 @@ ${EXE}: graph_gpu.o graph_cuda.o graph.o louvain_gpu.o main.o heap.o clustering.
 endif
 
 clean:
-	rm -f *.o
+	rm -f *.o ${EXE}

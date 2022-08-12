@@ -11,8 +11,8 @@
 #include "graph.hpp"
 #include "cuda_wrapper.hpp"
 
-#ifdef USE_PAR_EXEC_POLICY
 #include <numeric>
+#ifdef USE_PAR_EXEC_POLICY
 #include <execution>
 #endif
 
@@ -1414,12 +1414,12 @@ bool GraphGPU::aggregation()
 
     //std::cout << "my ne " << indicesHost_[NV_] << std::endl;
     GraphElem old_nv[NGPU];
-    GraphElem old_ne[NGPU];
+    //GraphElem old_ne[NGPU];
 
     for(int i = 0; i < NGPU; ++i)
     {
         old_nv[i] = nv_[i];
-        old_ne[i] = ne_[i];
+        //old_ne[i] = ne_[i];
     }
     determine_edge_device_partition();
     //std::cout << vertexIdsOffsetHost_[NV_-1] << std::endl;

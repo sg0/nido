@@ -18,11 +18,8 @@ graph formats) is packaged separately with Vite, which is an
 implementation of Louvain method in distributed memory.
 
 Please follow instructions in Vite README for binary file 
-conversion: 
-https://github.com/Exa-Graph/vite/blob/master/README#L130
-
-Vite could be downloaded from:
-https://github.com/Exa-Graph/vite
+conversion (requires Vite): 
+<https://github.com/Exa-Graph/vite/blob/master/README#L130>
 
 This code requires NVIDIA CUDA (preferably 11.x, > 10.x) 
 and C++14 compliant compiler (e.g., GNU GCC 9.1) for building. 

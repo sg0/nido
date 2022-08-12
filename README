@@ -1,0 +1,83 @@
+************************
+nido (/knee/ˈdough/)
+************************
+
+*******
+-------
+ ABOUT
+-------
+*******
+nido is a multi-GPU (C++, CUDA) implementation of Louvain 
+method for graph community detection/clustering. 
+
+We allow users to pass any real world graph as input. However,
+we expect an input graph to be in a certain binary format, which
+we have observed to be more efficient than reading ASCII format
+files. The code for binary conversion (from a variety of common
+graph formats) is packaged separately with Vite, which is an 
+implementation of Louvain method in distributed memory.
+
+Please follow instructions in Vite README for binary file 
+conversion: 
+https://github.com/Exa-Graph/vite/blob/master/README#L130
+
+Vite could be downloaded from:
+https://github.com/Exa-Graph/vite
+
+This code requires NVIDIA CUDA (preferably 11.x, > 10.x) 
+and C++14 compliant compiler (e.g., GNU GCC 9.1) for building. 
+
+Please contact the following for any queries or support:
+Sayan Ghosh, PNNL (sg0 at pnnl dot gov)
+
+Paper: H. Chou and S. Ghosh. 2022. "Batched Graph Community 
+Detection on GPUs". In 31st International Conference on Parallel 
+Architectures and Compilation Techniques (PACT).
+
+*************
+-------------
+ COMPILATION
+-------------
+*************
+Please make minimal changes to the Makefile with the compiler flags 
+and use a C++14 compliant compiler of your choice. 
+
+Invoke `make clean; make` should build the binary (e.g., run_1_70). 
+Execute the code with specific arguments mentioned in the next 
+section. The Makefile has `NGPU` and `SM` shell variables to select 
+the #GPUs and GPU architecture.
+
+Pass a suitable value (equal to the #sockets or NUMA nodes on the 
+system) to the GRAPH_FT_LOAD macro at compile-time, like 
+-DGRAPH_FT_LOAD=4. This is important for `first touch' purposes.
+
+The default values for certain variables are specified in types.hpp.
+
+***********************
+-----------------------
+ EXECUTING THE PROGRAM
+-----------------------
+***********************
+
+E.g.: 
+./run_1_70 -f karate.bin
+./run_2_70 -f com-orkut.bin -b 32
+./run_2_70 -f com-orkut.bin -b 8 -i 100 -t 1.0E-03
+
+Possible options (can be combined):
+
+1. -f <bin-file>   : Specify input binary file after this argument. 
+2. -p              : Influence the way partitions are computed, do not modify
+                     without consulting the code. 
+3. -r <|V|> <EF>   : #Vertices and edge-factor (EF*|V|==#edges) for randomly 
+                     generated graph.
+4. -c              : Uses Luby's algorithm for coloring.
+5. -b <#batches>   : Specify #batches, default is 2 and it can affect the 
+                     quality significantly, so try increasing it to 8--32.
+6. -t <threshold>  : Specify threshold quantity (default: 1.0E-06) used to 
+                     determine the exit criteria in an iteration.
+7. -i              : Specify maximum #iterations per phase (default: 500).                    
+8. -o <file-name>  : Specify output file name for storing the communities/clusters.
+9. -h              : Prints sample execution options. 
+
+We recommend just passing -f & -b options for most cases. 

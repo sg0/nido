@@ -71,9 +71,10 @@ to the size of the input graph as well.
 More discussions on various native format to binary file conversion: 
 <https://github.com/Exa-Graph/vite/blob/master/README#L130>
 
-E.g.: 
+Once you have a binary graph, these are a few ways to run the code: 
 ./run_1_70 -f karate.bin
 ./run_2_70 -f com-orkut.bin -b 32
+./run_2_70 -f com-orkut.bin -b 32 -o communities-com-orkut.txt
 ./run_2_70 -f com-orkut.bin -b 8 -i 100 -t 1.0E-03
 
 Possible options (can be combined):

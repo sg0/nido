@@ -10,19 +10,8 @@ nido (/knee/ˈdough/)
 nido is a multi-GPU (C++, CUDA) implementation of Louvain 
 method for graph community detection/clustering. 
 
-We allow users to pass any real world graph as input. However,
-we expect an input graph to be in a certain binary format, which
-we have observed to be more efficient than reading ASCII format
-files. The code for binary conversion (from a variety of common
-graph formats) is packaged separately with Vite, which is an 
-implementation of Louvain method in distributed memory.
-
-Please follow instructions in Vite README for binary file 
-conversion (requires Vite): 
-<https://github.com/Exa-Graph/vite/blob/master/README#L130>
-
 This code requires NVIDIA CUDA (preferably 11.x, > 10.x) 
-and C++14 compliant compiler (e.g., GNU GCC 9.1) for building. 
+and C++14 compliant compiler (e.g., GNU GCC 9.x) for building. 
 
 Please contact the following for any queries or support:
 Sayan Ghosh, PNNL (sg0 at pnnl dot gov)
@@ -55,6 +44,18 @@ The default values for certain variables are specified in types.hpp.
  EXECUTING THE PROGRAM
 -----------------------
 ***********************
+
+We allow users to pass any real world graph as input (or optionally 
+use a random graph, which is not recommended). However, we expect 
+an input graph to be in a certain binary format, which we have 
+observed to be more efficient than reading ASCII format files. 
+The code for binary conversion (from a variety of common graph 
+formats) is packaged separately with Vite, which is an 
+implementation of Louvain method in distributed memory.
+
+Please follow instructions in Vite README for binary file 
+conversion (requires Vite): 
+<https://github.com/Exa-Graph/vite/blob/master/README#L130>
 
 E.g.: 
 ./run_1_70 -f karate.bin

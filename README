@@ -58,8 +58,8 @@ Follow these three steps to convert a matrix-market file to binary:
 1. Download and build Vite: <https://github.com/Exa-Graph/vite> 
    (requires a C++11 compiler and MPI)
    
-2. Download matrix-market format file from the SuiteSparse collection: 
-   https://sparse.tamu.edu/
+2. Download matrix-market format file (with .mtx extension) from the 
+   SuiteSparse collection: https://sparse.tamu.edu/
 
 3. Use fileConvert utility in Vite as follows:
    bin/./fileConvert -m -f com-orkut.mtx -o com-orkut.bin

@@ -55,7 +55,7 @@ implementation of Louvain method in distributed memory.
 
 Follow these three steps to convert a matrix-market file to binary:
 
-1. Download and build Vite: <https://github.com/Exa-Graph/vite> 
+1. Download and build Vite: <https://github.com/ECP-ExaGraph/vite> 
    (requires a C++11 compiler and MPI)
    
 2. Download matrix-market format file (with .mtx extension) from the 
@@ -69,7 +69,7 @@ size of the input graph. The memory requirements are proportional
 to the size of the input graph as well.
 
 More discussions on various native format to binary file conversion: 
-<https://github.com/Exa-Graph/vite/blob/master/README#L130>
+<https://github.com/ECP-ExaGraph/vite/blob/master/README#L130>
 
 Once you have a binary graph, these are a few ways to run the code: 
 ./run_1_70 -f karate.bin
